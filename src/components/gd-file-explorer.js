@@ -951,24 +951,27 @@ export class GdFileExplorer extends LitElement {
 
     /* EPUB viewer */
     .epub-viewer {
-      width: 100%; height: 100%; display: flex; flex-direction: column; background: var(--color-surface, #fff);
+      width: 100%; position: relative; background: var(--color-surface, #fff);
     }
     .epub-viewer .epub-content {
-      flex: 1; overflow: hidden; position: relative;
+      overflow: hidden; position: relative;
     }
-    .epub-viewer .epub-nav {
-      display: flex; align-items: center; justify-content: space-between; padding: 8px 12px;
-      border-top: 1px solid var(--color-border, #dadce0); background: var(--color-bg, #f8f9fa);
+    .epub-viewer .epub-page-info {
+      text-align: center; padding: 6px 0; font-size: 12px;
+      color: var(--color-text-secondary, #5f6368);
     }
-    .epub-viewer .epub-nav button {
-      padding: 6px 16px; border: 1px solid var(--color-border, #dadce0); border-radius: 4px;
-      background: var(--color-surface, #fff); color: var(--color-text, #202124);
-      font-size: 13px; cursor: pointer;
+    .epub-viewer .epub-nav-btn {
+      position: absolute; top: 50%; transform: translateY(-50%); z-index: 10;
+      width: 40px; height: 60px; border: none; border-radius: 4px;
+      background: rgba(0,0,0,0.15); color: rgba(255,255,255,0.9);
+      font-size: 22px; cursor: pointer; opacity: 0.4; transition: opacity 0.2s;
+      display: flex; align-items: center; justify-content: center;
     }
-    .epub-viewer .epub-nav button:hover { background: var(--color-hover, #f1f3f4); }
-    .epub-viewer .epub-nav button:disabled { opacity: 0.4; cursor: not-allowed; }
-    .epub-viewer .epub-nav span { font-size: 12px; color: var(--color-text-secondary, #5f6368); }
-    .epub-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; }
+    .epub-viewer .epub-nav-btn:hover { opacity: 0.8; }
+    .epub-viewer .epub-nav-btn:disabled { opacity: 0.1; cursor: not-allowed; }
+    .epub-viewer .epub-nav-prev { left: 4px; }
+    .epub-viewer .epub-nav-next { right: 4px; }
+    .epub-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 300px; }
 
     /* Comic viewer (CBZ/CBR) */
     .comic-viewer {
@@ -2300,27 +2303,36 @@ export class GdFileExplorer extends LitElement {
       // Clear loading indicator
       container.innerHTML = '';
 
-      // Create content area and nav
+      // Calculate height: book-like aspect ratio (roughly 4:5) capped at 80vh
+      const containerWidth = container.offsetWidth || 600;
+      const epubHeight = Math.min(Math.round(containerWidth * 1.25), window.innerHeight * 0.8);
+
+      // Create content area
       const content = document.createElement('div');
       content.className = 'epub-content';
+      content.style.height = `${epubHeight}px`;
       container.appendChild(content);
 
-      const nav = document.createElement('div');
-      nav.className = 'epub-nav';
+      // Navigation buttons overlaid on content
       const prevBtn = document.createElement('button');
-      prevBtn.textContent = '← Anterior';
-      const pageInfo = document.createElement('span');
-      pageInfo.textContent = 'Cargando...';
+      prevBtn.className = 'epub-nav-btn epub-nav-prev';
+      prevBtn.innerHTML = '‹';
+      container.appendChild(prevBtn);
+
       const nextBtn = document.createElement('button');
-      nextBtn.textContent = 'Siguiente →';
-      nav.appendChild(prevBtn);
-      nav.appendChild(pageInfo);
-      nav.appendChild(nextBtn);
-      container.appendChild(nav);
+      nextBtn.className = 'epub-nav-btn epub-nav-next';
+      nextBtn.innerHTML = '›';
+      container.appendChild(nextBtn);
+
+      // Page info below
+      const pageInfo = document.createElement('div');
+      pageInfo.className = 'epub-page-info';
+      pageInfo.textContent = 'Cargando...';
+      container.appendChild(pageInfo);
 
       const rend = book.renderTo(content, {
         width: '100%',
-        height: '100%',
+        height: `${epubHeight}px`,
         spread: 'none',
       });
 
