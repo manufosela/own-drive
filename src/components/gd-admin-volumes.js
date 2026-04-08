@@ -15,6 +15,7 @@ export class GdAdminVolumes extends LitElement {
     _mode: { state: true },
     _form: { state: true },
     _pendingDelete: { state: true },
+    _reindexing: { state: true },
   };
 
   constructor() {
@@ -30,6 +31,7 @@ export class GdAdminVolumes extends LitElement {
     this._form = { name: '', mount_path: '' };
     /** @type {{id: number, name: string}|null} */
     this._pendingDelete = null;
+    this._reindexing = false;
   }
 
   /** @type {AbortController|null} */
@@ -166,7 +168,12 @@ export class GdAdminVolumes extends LitElement {
     return html`
       <div class="header">
         <h2>Volumenes</h2>
-        <button class="btn btn-primary" @click=${() => this._startCreate()}>Registrar volumen</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary" ?disabled=${this._reindexing} @click=${() => this._reindex()}>
+            ${this._reindexing ? 'Reindexando...' : 'Reindexar'}
+          </button>
+          <button class="btn btn-primary" @click=${() => this._startCreate()}>Registrar volumen</button>
+        </div>
       </div>
       ${this._volumes.length === 0
         ? html`<p class="empty-state">No hay volúmenes configurados</p>`
@@ -275,6 +282,22 @@ export class GdAdminVolumes extends LitElement {
       await this._loadData();
     } catch (err) {
       this._error = err.message;
+    }
+  }
+
+  async _reindex() {
+    this._reindexing = true;
+    this._error = '';
+    this._message = '';
+    try {
+      const res = await fetch('/api/admin/reindex', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al reindexar');
+      this._message = data.message || 'Reindexación iniciada en segundo plano';
+    } catch (err) {
+      this._error = err.message;
+    } finally {
+      this._reindexing = false;
     }
   }
 
