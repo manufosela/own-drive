@@ -63,6 +63,7 @@ export class GdFileExplorer extends LitElement {
     _epubBook: { state: true },
     _comicPages: { state: true },
     _comicCurrentPage: { state: true },
+    _inlineVideoFile: { state: true },
   };
 
   constructor() {
@@ -171,6 +172,8 @@ export class GdFileExplorer extends LitElement {
     this._comicPages = [];
     /** @type {number} Current comic page index */
     this._comicCurrentPage = 0;
+    /** @type {FileItem|null} Video playing inline below the file list */
+    this._inlineVideoFile = null;
   }
 
   /** @type {ApiClient} */
@@ -990,6 +993,30 @@ export class GdFileExplorer extends LitElement {
     .comic-viewer .comic-nav span { font-size: 12px; color: #aaa; }
     .comic-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #aaa; }
 
+    /* Inline video player */
+    .inline-video {
+      margin-top: 16px; border: 1px solid var(--color-border, #dadce0); border-radius: 8px;
+      overflow: hidden; background: #000;
+    }
+    .inline-video .inline-video-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 12px; background: var(--color-surface, #fff);
+      border-bottom: 1px solid var(--color-border, #dadce0);
+    }
+    .inline-video .inline-video-header span {
+      font-size: 13px; font-weight: 500; color: var(--color-text, #202124);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .inline-video .inline-video-header button {
+      background: none; border: none; cursor: pointer; padding: 4px;
+      color: var(--color-text-secondary, #5f6368); border-radius: 4px;
+    }
+    .inline-video .inline-video-header button:hover { background: var(--color-hover, #f1f3f4); }
+    .inline-video .inline-video-header button svg { width: 20px; height: 20px; }
+    .inline-video video {
+      width: 100%; max-height: 70vh; display: block;
+    }
+
     .dicom-slice-indicator {
       position: absolute;
       top: 8px;
@@ -1622,6 +1649,7 @@ export class GdFileExplorer extends LitElement {
           ${this._renderPreviewPanel()}
         </div>
       ` : fileListContent}
+      ${this._inlineVideoFile ? this._renderInlineVideo() : nothing}
       ${hasOverlayPreview ? this._renderPreviewOverlay() : nothing}
       ${this._showMkdirDialog ? this._renderMkdirDialog() : nothing}
       ${this._showDeleteDialog ? this._renderDeleteDialog() : nothing}
@@ -2127,7 +2155,8 @@ export class GdFileExplorer extends LitElement {
   static _previewableExtensions = new Set([
     '.pdf', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp',
     '.txt', '.csv', '.json', '.xml', '.html', '.htm',
-    '.mp4', '.webm', '.ogg', '.mp3', '.wav',
+    '.mp4', '.webm', '.ogg', '.mkv', '.avi', '.mov', '.m4v',
+    '.mp3', '.wav', '.flac', '.aac', '.m4a',
     '.stl', '.md', '.dcm', '.epub', '.cbz', '.cbr',
     // Code & scripts
     '.bat', '.cmd', '.sh', '.bash', '.zsh', '.ps1',
@@ -2181,8 +2210,8 @@ export class GdFileExplorer extends LitElement {
       '.gitignore', '.dockerignore', '.htaccess',
       '.log', '.reg',
     ].includes(ext)) return 'text';
-    if (['.mp4', '.webm', '.ogg'].includes(ext)) return 'video';
-    if (['.mp3', '.wav'].includes(ext)) return 'audio';
+    if (['.mp4', '.webm', '.ogg', '.mkv', '.avi', '.mov', '.m4v'].includes(ext)) return 'video';
+    if (['.mp3', '.wav', '.flac', '.aac', '.m4a'].includes(ext)) return 'audio';
     if (ext === '.epub') return 'epub';
     if (['.cbz', '.cbr'].includes(ext)) return 'comic';
     return 'unknown';
@@ -2193,10 +2222,17 @@ export class GdFileExplorer extends LitElement {
    * @param {FileItem} item
    */
   _openPreview(item) {
-    if (this._isPreviewable(item.name)) {
-      this._previewFile = item;
-    } else {
+    if (!this._isPreviewable(item.name)) {
       this._downloadFile(item.path);
+      return;
+    }
+    const type = this._getPreviewType(item.name);
+    if (type === 'video') {
+      this._closePreview();
+      this._inlineVideoFile = item;
+    } else {
+      this._inlineVideoFile = null;
+      this._previewFile = item;
     }
   }
 
@@ -2227,6 +2263,7 @@ export class GdFileExplorer extends LitElement {
     this._comicPages = [];
     this._comicCurrentPage = 0;
     this._previewFile = null;
+    this._inlineVideoFile = null;
   }
 
   async _initEpubViewer(container) {
@@ -3164,6 +3201,28 @@ export class GdFileExplorer extends LitElement {
       <div class="preview-unsupported">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/></svg>
         <p>No se puede previsualizar este archivo</p>
+      </div>
+    `;
+  }
+
+  /** Inline video player below the file list */
+  _renderInlineVideo() {
+    const file = this._inlineVideoFile;
+    const videoUrl = this.#api.getPreviewUrl(file.path);
+    return html`
+      <div class="inline-video">
+        <div class="inline-video-header">
+          <span title="${file.name}">${file.name}</span>
+          <div style="display:flex;gap:4px">
+            <button @click=${() => this._downloadFile(file.path)} title="Descargar">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+            </button>
+            <button @click=${() => { this._inlineVideoFile = null; }} title="Cerrar">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+            </button>
+          </div>
+        </div>
+        <video controls autoplay src="${videoUrl}" style="max-width:100%;max-height:70vh"></video>
       </div>
     `;
   }
