@@ -1,0 +1,42 @@
+---
+/**
+ * Auth callback route.
+ * Receives the session JWT from Auth&Sign after successful login,
+ * stores it as an httpOnly cookie, and redirects to the original page.
+ */
+
+import { config } from '../../lib/config.js';
+import { verifyToken, resolveUser } from '../../lib/auth-middleware.js';
+import { logAudit, getClientIp } from '../../lib/audit-logger.js';
+
+const url = new URL(Astro.request.url);
+const token = url.searchParams.get('token');
+const state = url.searchParams.get('state');
+
+if (!token) {
+  return new Response('Missing token parameter', { status: 400 });
+}
+
+const proto = Astro.request.headers.get('x-forwarded-proto') || Astro.url.protocol.replace(':', '');
+const isSecure = proto === 'https';
+
+Astro.cookies.set('auth_token', token, {
+  httpOnly: true,
+  secure: isSecure,
+  sameSite: 'lax',
+  path: '/',
+  maxAge: 3600,
+});
+
+// Audit: log login event (best-effort)
+try {
+  const payload = await verifyToken(token);
+  if (payload) {
+    const user = await resolveUser(payload);
+    if (user) logAudit({ userId: user.id, action: 'login', path: '/', ipAddress: getClientIp(Astro) });
+  }
+} catch { /* best-effort */ }
+
+const redirectTo = state || '/';
+return Astro.redirect(redirectTo);
+---

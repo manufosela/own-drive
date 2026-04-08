@@ -1,0 +1,1138 @@
+{
+  "info": {
+    "name": "Geniova Drive API",
+    "description": "API para gestión de ficheros en NAS Synology.\n\nAutenticación: JWT via header `Authorization: Bearer <token>` o cookie `auth_token`.\n\nPermisos UNIX: r (read), w (write), x (execute/navigate), d (delete).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "health"]
+            },
+            "description": "Devuelve el estado de la aplicación y la conexión a la base de datos.\n\nNo requiere autenticación."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or 503', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 503]);",
+                  "});",
+                  "",
+                  "pm.test('Response has expected structure', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('status');",
+                  "  pm.expect(body).to.have.property('timestamp');",
+                  "  pm.expect(body).to.have.property('services');",
+                  "  pm.expect(body.services).to.have.property('app');",
+                  "  pm.expect(body.services).to.have.property('database');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Files - Listing",
+      "item": [
+        {
+          "name": "List Directory",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/files?path=/datosnas&page=1&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files"],
+              "query": [
+                {
+                  "key": "path",
+                  "value": "/datosnas",
+                  "description": "Virtual path del directorio a listar"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Página (default: 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Items por página (default: 50, max: 200)"
+                }
+              ]
+            },
+            "description": "Lista el contenido de un directorio con metadatos.\n\nRequiere permiso `r` (read) en el path.\n\nOrdena: carpetas primero, luego ficheros, ambos alfabéticamente.\n\nFiltra automáticamente carpetas de sistema Synology (#recycle, @eaDir)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has pagination structure', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('path');",
+                  "  pm.expect(body).to.have.property('items');",
+                  "  pm.expect(body).to.have.property('total');",
+                  "  pm.expect(body).to.have.property('page');",
+                  "  pm.expect(body).to.have.property('limit');",
+                  "  pm.expect(body).to.have.property('pages');",
+                  "});",
+                  "",
+                  "pm.test('Items have expected fields', function () {",
+                  "  const body = pm.response.json();",
+                  "  if (body.items.length > 0) {",
+                  "    const item = body.items[0];",
+                  "    pm.expect(item).to.have.property('name');",
+                  "    pm.expect(item).to.have.property('type');",
+                  "    pm.expect(item).to.have.property('size');",
+                  "    pm.expect(item).to.have.property('modified');",
+                  "    pm.expect(item).to.have.property('path');",
+                  "    pm.expect(item.type).to.be.oneOf(['file', 'directory']);",
+                  "  }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Directory - No Path (400)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/files",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files"]
+            },
+            "description": "Debe devolver 400 si no se proporciona el parámetro path."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 400', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error message mentions path', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.error).to.include('path');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Subdirectory",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/files?path=/datosnas/stls&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files"],
+              "query": [
+                {
+                  "key": "path",
+                  "value": "/datosnas/stls"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Listar una subcarpeta específica."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or 404', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Files - Search",
+      "item": [
+        {
+          "name": "Search Files",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/files/search?path=/datosnas&q=model",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files", "search"],
+              "query": [
+                {
+                  "key": "path",
+                  "value": "/datosnas",
+                  "description": "Directorio raíz donde buscar"
+                },
+                {
+                  "key": "q",
+                  "value": "model",
+                  "description": "Término de búsqueda (mín 2 caracteres)"
+                }
+              ]
+            },
+            "description": "Busca ficheros/carpetas por nombre de forma recursiva.\n\nBúsqueda case-insensitive. Máximo 100 resultados.\n\nRequiere permiso `r` (read) en el path raíz."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or error', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 400, 403]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Response has search structure', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('query');",
+                  "    pm.expect(body).to.have.property('results');",
+                  "    pm.expect(body).to.have.property('total');",
+                  "    pm.expect(body.results).to.be.an('array');",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search - Query Too Short (400)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/files/search?path=/datosnas&q=a",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files", "search"],
+              "query": [
+                {
+                  "key": "path",
+                  "value": "/datosnas"
+                },
+                {
+                  "key": "q",
+                  "value": "a"
+                }
+              ]
+            },
+            "description": "Búsqueda con query de 1 carácter. Debe devolver 400."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Short query returns 400', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Files - Operations",
+      "item": [
+        {
+          "name": "Create Directory",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"/datosnas/test-folder\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/files/mkdir",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files", "mkdir"]
+            },
+            "description": "Crea un nuevo directorio.\n\nRequiere permiso `w` (write) en el directorio padre.\n\nDevuelve 201 si se crea correctamente, 409 si ya existe."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201 or 409', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([201, 409]);",
+                  "});",
+                  "",
+                  "pm.test('Response has path', function () {",
+                  "  const body = pm.response.json();",
+                  "  if (pm.response.code === 201) {",
+                  "    pm.expect(body).to.have.property('path');",
+                  "  }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rename Item",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"/datosnas/test-folder\",\n  \"newName\": \"test-folder-renamed\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/files/rename",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files", "rename"]
+            },
+            "description": "Renombra un fichero o carpeta.\n\nRequiere permiso `w` (write) en el directorio padre.\n\n`newName` debe ser solo el nombre, sin separadores de ruta."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or error', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 400, 403, 404, 409]);",
+                  "});",
+                  "",
+                  "pm.test('Success response has path', function () {",
+                  "  if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('path');",
+                  "  }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Move Item",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"/datosnas/test-folder-renamed\",\n  \"destination\": \"/datosnas\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/files/move",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files", "move"]
+            },
+            "description": "Mueve un fichero o carpeta a otro directorio.\n\nRequiere permiso `w` (write) tanto en el directorio origen como en el destino.\n\nEl destino debe ser un directorio existente."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or error', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 400, 403, 404, 409]);",
+                  "});",
+                  "",
+                  "pm.test('Success response has path', function () {",
+                  "  if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('path');",
+                  "  }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Item",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/files?path=/datosnas/test-folder-renamed",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files"],
+              "query": [
+                {
+                  "key": "path",
+                  "value": "/datosnas/test-folder-renamed",
+                  "description": "Virtual path del elemento a borrar"
+                }
+              ]
+            },
+            "description": "Borra un fichero o carpeta moviéndolo a la papelera de Synology (#recycle).\n\nRequiere permiso `d` (delete) en el directorio padre.\n\nEl elemento no se elimina del disco, solo se mueve a #recycle en la raíz del mount point."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or error', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 400, 403, 404]);",
+                  "});",
+                  "",
+                  "pm.test('Success response has message', function () {",
+                  "  if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('message');",
+                  "  }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Files - Download",
+      "item": [
+        {
+          "name": "Download Single File",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/files/download?path=/datosnas/ejemplo.stl",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files", "download"],
+              "query": [
+                {
+                  "key": "path",
+                  "value": "/datosnas/ejemplo.stl",
+                  "description": "Virtual path del fichero a descargar"
+                }
+              ]
+            },
+            "description": "Descarga un fichero individual con MIME type correcto y Content-Disposition.\n\nRequiere permiso `r` (read)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or error', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 400, 403, 404]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Has Content-Disposition header', function () {",
+                  "    pm.expect(pm.response.headers.get('Content-Disposition')).to.include('attachment');",
+                  "  });",
+                  "  pm.test('Has Content-Length header', function () {",
+                  "    pm.expect(pm.response.headers.get('Content-Length')).to.exist;",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Download Multiple as ZIP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paths\": [\n    \"/datosnas/file1.stl\",\n    \"/datosnas/file2.pdf\"\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/files/download-zip",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files", "download-zip"]
+            },
+            "description": "Descarga múltiples ficheros como un archivo ZIP.\n\nRequiere permiso `r` (read) en cada fichero.\n\nEl body debe contener un array `paths` con las rutas virtuales."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or error', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 400, 403, 404]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type is application/zip', function () {",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.equal('application/zip');",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Files - Upload (Chunked)",
+      "item": [
+        {
+          "name": "Init Upload Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"/datosnas/stls/model.stl\",\n  \"fileName\": \"model.stl\",\n  \"totalSize\": 50000000,\n  \"totalChunks\": 10\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/files/upload/init",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files", "upload", "init"]
+            },
+            "description": "Inicia una sesión de subida chunked.\n\nRequiere permiso `w` (write) en el directorio padre del path destino.\n\nDevuelve un `uploadId` que se usa en las llamadas posteriores."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or error', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 400, 403, 409, 413]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Response has uploadId', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.success).to.be.true;",
+                  "    pm.expect(body.uploadId).to.be.a('string');",
+                  "    pm.expect(body.totalChunks).to.be.a('number');",
+                  "    pm.environment.set('uploadId', body.uploadId);",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Upload Chunk",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/octet-stream"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "binary chunk data here"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/files/upload/chunk?uploadId={{uploadId}}&chunkIndex=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files", "upload", "chunk"],
+              "query": [
+                {
+                  "key": "uploadId",
+                  "value": "{{uploadId}}",
+                  "description": "ID de sesión obtenido en init"
+                },
+                {
+                  "key": "chunkIndex",
+                  "value": "0",
+                  "description": "Índice del chunk (0-based)"
+                }
+              ]
+            },
+            "description": "Sube un chunk individual de datos binarios.\n\nEl body es el contenido binario crudo del chunk.\n\nSolo el usuario que inició la sesión puede subir chunks."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or error', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 400, 403, 404]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Response confirms chunk index', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.success).to.be.true;",
+                  "    pm.expect(body.chunkIndex).to.be.a('number');",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Upload Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/files/upload/status?uploadId={{uploadId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files", "upload", "status"],
+              "query": [
+                {
+                  "key": "uploadId",
+                  "value": "{{uploadId}}",
+                  "description": "ID de sesión obtenido en init"
+                }
+              ]
+            },
+            "description": "Consulta el estado de una sesión de subida: qué chunks se han subido y cuáles faltan.\n\nÚtil para reanudar subidas interrumpidas."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or error', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 403, 404]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Response has chunk tracking', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.success).to.be.true;",
+                  "    pm.expect(body.uploadedChunks).to.be.an('array');",
+                  "    pm.expect(body.missingChunks).to.be.an('array');",
+                  "    pm.expect(body.totalChunks).to.be.a('number');",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Complete Upload",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uploadId\": \"{{uploadId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/files/upload/complete",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files", "upload", "complete"]
+            },
+            "description": "Ensambla todos los chunks en el fichero final y limpia la sesión temporal.\n\nTodos los chunks deben haberse subido previamente.\n\nDevuelve el path virtual y el tamaño final del fichero."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or error', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 400, 403, 404]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Response has final file info', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.success).to.be.true;",
+                  "    pm.expect(body.path).to.be.a('string');",
+                  "    pm.expect(body.size).to.be.a('number');",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Quota",
+      "item": [
+        {
+          "name": "Get User Quota",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/quota",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "quota"]
+            },
+            "description": "Devuelve la información de cuota del usuario autenticado.\n\nSi el usuario no tiene cuota configurada, devuelve `{ unlimited: true }`.\n\nCampos: maxBytes, usedBytes, availableBytes, percentUsed."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has quota info or unlimited flag', function () {",
+                  "  const body = pm.response.json();",
+                  "  if (body.unlimited) {",
+                  "    pm.expect(body.unlimited).to.be.true;",
+                  "  } else {",
+                  "    pm.expect(body).to.have.property('maxBytes');",
+                  "    pm.expect(body).to.have.property('usedBytes');",
+                  "    pm.expect(body).to.have.property('availableBytes');",
+                  "    pm.expect(body).to.have.property('percentUsed');",
+                  "    pm.expect(body.maxBytes).to.be.a('number');",
+                  "    pm.expect(body.usedBytes).to.be.a('number');",
+                  "  }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Security",
+      "item": [
+        {
+          "name": "Path Traversal Attempt (400)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/files?path=/datosnas/../../etc/passwd",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files"],
+              "query": [
+                {
+                  "key": "path",
+                  "value": "/datosnas/../../etc/passwd"
+                }
+              ]
+            },
+            "description": "Intento de path traversal. Debe devolver 400."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Path traversal is blocked', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid Mount Point (400)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/files?path=/etc/passwd",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files"],
+              "query": [
+                {
+                  "key": "path",
+                  "value": "/etc/passwd"
+                }
+              ]
+            },
+            "description": "Path fuera de los mount points permitidos. Debe devolver 400."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Invalid mount point is blocked', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "No Auth Token (401)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/files?path=/datosnas",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "files"],
+              "query": [
+                {
+                  "key": "path",
+                  "value": "/datosnas"
+                }
+              ]
+            },
+            "description": "Petición sin token de autenticación. Debe devolver 401."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Unauthenticated request returns 401', function () {",
+                  "  pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "List All Permissions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/permissions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "permissions"]
+            },
+            "description": "Lista todas las entradas de permisos con nombres de owner y grupo.\n\nSolo accesible para administradores (is_admin=true)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or 403', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 403]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Response has permissions array', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('permissions');",
+                  "    pm.expect(body.permissions).to.be.an('array');",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Permission by Path",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/permissions?path=/datosnas",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "permissions"],
+              "query": [
+                {
+                  "key": "path",
+                  "value": "/datosnas",
+                  "description": "Virtual path to get permissions for"
+                }
+              ]
+            },
+            "description": "Obtiene la entrada de permisos de un path específico."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or error', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 403, 404]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Permissions",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"/datosnas\",\n  \"group_perms\": \"rwx\",\n  \"inherit\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/permissions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "permissions"]
+            },
+            "description": "Actualiza los permisos de un path existente.\n\nCampos actualizables: owner_id, group_id, owner_perms, group_perms, others_perms, inherit."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or error', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 400, 403, 404]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Permission Entry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"/datosnas/stls\",\n  \"mount_point\": \"/datosnas\",\n  \"owner_id\": 1,\n  \"group_id\": 1,\n  \"owner_perms\": \"rwxd\",\n  \"group_perms\": \"rx\",\n  \"others_perms\": \"r\",\n  \"inherit\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/permissions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "permissions"]
+            },
+            "description": "Crea una nueva entrada de permisos para un path.\n\nRequiere path y mount_point. Los permisos tienen valores por defecto: owner=rwxd, group=rx, others=r."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201 or error', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([201, 400, 403, 409]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "users"]
+            },
+            "description": "Lista todos los usuarios con sus membresías de grupo.\n\nSolo accesible para administradores."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or 403', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 403]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Response has users array', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('users');",
+                  "    pm.expect(body.users).to.be.an('array');",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Groups",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/groups",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "groups"]
+            },
+            "description": "Lista todos los grupos con número de miembros.\n\nSolo accesible para administradores."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or 403', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 403]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Response has groups array', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('groups');",
+                  "    pm.expect(body.groups).to.be.an('array');",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
