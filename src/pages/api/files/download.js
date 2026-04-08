@@ -70,6 +70,21 @@ const MIME_TYPES = {
   '.editorconfig': 'text/plain',
   '.htaccess': 'text/plain',
   '.reg': 'text/plain',
+  '.mp4': 'video/mp4',
+  '.mkv': 'video/x-matroska',
+  '.avi': 'video/x-msvideo',
+  '.mov': 'video/quicktime',
+  '.m4v': 'video/mp4',
+  '.webm': 'video/webm',
+  '.ogg': 'video/ogg',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.flac': 'audio/flac',
+  '.aac': 'audio/aac',
+  '.m4a': 'audio/mp4',
+  '.epub': 'application/epub+zip',
+  '.cbz': 'application/vnd.comicbook+zip',
+  '.cbr': 'application/vnd.comicbook-rar',
   '.doc': 'application/msword',
   '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   '.xls': 'application/vnd.ms-excel',
@@ -131,6 +146,41 @@ export async function GET(context) {
   const inline = context.url.searchParams.get('inline') === 'true';
   const disposition = inline ? 'inline' : `attachment; filename="${fileName}"`;
 
+  // Range request support (required for video/audio streaming)
+  const rangeHeader = context.request.headers?.get?.('range') || null;
+
+  if (rangeHeader) {
+    const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
+    if (!match) {
+      return new Response('Invalid Range header', { status: 416 });
+    }
+
+    const start = parseInt(match[1], 10);
+    const end = match[2] ? parseInt(match[2], 10) : stat.size - 1;
+
+    if (start >= stat.size || end >= stat.size) {
+      return new Response('Range Not Satisfiable', {
+        status: 416,
+        headers: { 'Content-Range': `bytes */${stat.size}` },
+      });
+    }
+
+    const chunkSize = end - start + 1;
+    const stream = fs.createReadStream(sanitized.realPath, { start, end });
+    const webStream = Readable.toWeb(stream);
+
+    return new Response(webStream, {
+      status: 206,
+      headers: {
+        'Content-Type': contentType,
+        'Content-Disposition': disposition,
+        'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+        'Content-Length': String(chunkSize),
+        'Accept-Ranges': 'bytes',
+      },
+    });
+  }
+
   const stream = fs.createReadStream(sanitized.realPath);
   const webStream = Readable.toWeb(stream);
 
@@ -140,6 +190,7 @@ export async function GET(context) {
       'Content-Type': contentType,
       'Content-Disposition': disposition,
       'Content-Length': String(stat.size),
+      'Accept-Ranges': 'bytes',
     },
   });
 }

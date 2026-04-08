@@ -28,11 +28,12 @@ describe('GET /api/files/download', () => {
     vi.clearAllMocks();
   });
 
-  function createContext(queryParams = {}, user = { id: 10, is_admin: false }) {
+  function createContext(queryParams = {}, user = { id: 10, is_admin: false }, headers = {}) {
     const params = new URLSearchParams(queryParams);
     return {
       url: new URL(`http://localhost:3000/api/files/download?${params}`),
       locals: { user },
+      request: { headers: new Map(Object.entries(headers)) },
     };
   }
 
