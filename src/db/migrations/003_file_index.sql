@@ -35,4 +35,4 @@ CREATE TABLE index_status (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-INSERT INTO index_status (mount_point) VALUES ('/raid5');
+INSERT INTO index_status (mount_point) VALUES ('/media/raid5');
