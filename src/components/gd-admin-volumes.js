@@ -74,9 +74,9 @@ export class GdAdminVolumes extends LitElement {
   `;
 
   updated(changed) {
-    if (this._mode === 'create') {
+    if (changed.has('_mode') && this._mode === 'create') {
       this.updateComplete.then(() => this._setupFocusTrap());
-    } else if (this._focusTrapController) {
+    } else if (changed.has('_mode') && this._mode !== 'create' && this._focusTrapController) {
       this._focusTrapController.abort();
       this._focusTrapController = null;
     }
@@ -197,13 +197,13 @@ export class GdAdminVolumes extends LitElement {
             <label for="vol-name">Nombre</label>
             <input id="vol-name" type="text" .value=${this._form.name}
               @input=${e => { this._form = { ...this._form, name: e.target.value }; }}
-              placeholder="Ej: datosnas" />
+              placeholder="Ej: raid5" />
           </div>
           <div class="form-field">
             <label for="vol-path">Punto de montaje</label>
             <input id="vol-path" type="text" .value=${this._form.mount_path}
               @input=${e => { this._form = { ...this._form, mount_path: e.target.value }; }}
-              placeholder="Ej: /mnt/datosnas" />
+              placeholder="Ej: /media/raid5" />
           </div>
         </div>
         <div class="form-actions">
