@@ -7,14 +7,9 @@ export const config = {
   postgres: {
     host: env('POSTGRES_HOST', 'localhost'),
     port: parseInt(env('POSTGRES_PORT', '5432')),
-    database: env('POSTGRES_DB', 'geniova_drive'),
-    user: env('POSTGRES_USER', 'geniova'),
+    database: env('POSTGRES_DB', 'own_drive'),
+    user: env('POSTGRES_USER', 'manu'),
     password: env('POSTGRES_PASSWORD'),
-  },
-  storage: {
-    mountPoints: [
-      env('STORAGE_MOUNT', '/media/raid5'),
-    ],
   },
   auth: {
     googleClientId: env('GOOGLE_CLIENT_ID'),

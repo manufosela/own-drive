@@ -35,7 +35,7 @@ export async function POST(context) {
 
   let sanitized;
   try {
-    sanitized = sanitizePath(filePath);
+    sanitized = await sanitizePath(filePath);
   } catch (err) {
     if (err instanceof PathError || err.name === 'PathError') {
       return jsonResponse({ error: err.message }, err.statusCode);

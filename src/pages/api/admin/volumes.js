@@ -1,5 +1,5 @@
 import { query } from '../../../lib/db.js';
-import { getMountPoints } from '../../../lib/path-sanitizer.js';
+import { getMountPoints, invalidateMountMap } from '../../../lib/path-sanitizer.js';
 
 /**
  * @param {object} context
@@ -41,7 +41,7 @@ export const GET = async (context) => {
   `);
 
   // Enrich with virtual_path from mount point map
-  const mounts = getMountPoints();
+  const mounts = await getMountPoints();
   const volumes = result.rows.map(v => {
     const mount = mounts.find(m => m.realPath === v.mount_path);
     return { ...v, virtual_path: mount?.virtualPath || null };
@@ -73,6 +73,8 @@ export const POST = async (context) => {
     'INSERT INTO volumes (name, mount_path) VALUES ($1, $2) RETURNING *',
     [name.trim(), mount_path.trim()]
   );
+
+  invalidateMountMap();
 
   return new Response(JSON.stringify(result.rows[0]), {
     status: 201, headers: JSON_HEADERS,
@@ -137,6 +139,8 @@ export const PUT = async (context) => {
     );
   }
 
+  invalidateMountMap();
+
   return new Response(JSON.stringify(updated), {
     status: 200, headers: JSON_HEADERS,
   });
@@ -180,6 +184,8 @@ export const DELETE = async (context) => {
   }
 
   await query('DELETE FROM volumes WHERE id = $1', [id]);
+
+  invalidateMountMap();
 
   return new Response(JSON.stringify({ deleted: { id } }), {
     status: 200, headers: JSON_HEADERS,

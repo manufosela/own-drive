@@ -60,7 +60,7 @@ export async function GET(context) {
   if (denied) return denied;
 
   const mountVirtual = context.url.searchParams.get('mount');
-  const mounts = getMountPoints();
+  const mounts = await getMountPoints();
 
   if (mountVirtual) {
     // List recycle for specific mount
@@ -118,7 +118,7 @@ export async function POST(context) {
     }), { status: 400, headers: JSON_HEADERS });
   }
 
-  const mounts = getMountPoints();
+  const mounts = await getMountPoints();
   const mountInfo = mounts.find(m => m.virtualPath === mount);
   if (!mountInfo) {
     return new Response(JSON.stringify({ error: 'Mount point not found' }), {
@@ -210,7 +210,7 @@ export async function DELETE(context) {
     }), { status: 400, headers: JSON_HEADERS });
   }
 
-  const mounts = getMountPoints();
+  const mounts = await getMountPoints();
   const mountInfo = mounts.find(m => m.virtualPath === mount);
   if (!mountInfo) {
     return new Response(JSON.stringify({ error: 'Mount point not found' }), {

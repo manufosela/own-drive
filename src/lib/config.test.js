@@ -15,12 +15,6 @@ describe('config', () => {
     expect(config.postgres.user).toBeDefined();
   });
 
-  it('should have storage section with mount points array', () => {
-    expect(config.storage).toBeDefined();
-    expect(config.storage.mountPoints).toBeInstanceOf(Array);
-    expect(config.storage.mountPoints.length).toBe(1);
-  });
-
   it('should have auth section with Google OAuth fields', () => {
     expect(config.auth).toBeDefined();
     expect(config.auth).toHaveProperty('googleClientId');

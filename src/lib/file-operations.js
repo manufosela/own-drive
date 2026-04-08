@@ -28,7 +28,7 @@ export async function renameItem(context, virtualPath, newName) {
 
   let sanitized;
   try {
-    sanitized = sanitizePath(virtualPath);
+    sanitized = await sanitizePath(virtualPath);
   } catch (err) {
     return handlePathError(err);
   }
@@ -67,7 +67,7 @@ export async function renameItem(context, virtualPath, newName) {
 export async function moveItem(context, sourcePath, destPath) {
   let srcSanitized;
   try {
-    srcSanitized = sanitizePath(sourcePath);
+    srcSanitized = await sanitizePath(sourcePath);
   } catch (err) {
     return handlePathError(err);
   }
@@ -81,7 +81,7 @@ export async function moveItem(context, sourcePath, destPath) {
 
   let destSanitized;
   try {
-    destSanitized = sanitizePath(destPath);
+    destSanitized = await sanitizePath(destPath);
   } catch (err) {
     return handlePathError(err);
   }
@@ -137,7 +137,7 @@ export async function moveItem(context, sourcePath, destPath) {
 export async function createDirectory(context, virtualPath) {
   let sanitized;
   try {
-    sanitized = sanitizeNewPath(virtualPath);
+    sanitized = await sanitizeNewPath(virtualPath);
   } catch (err) {
     return handlePathError(err);
   }
@@ -168,7 +168,7 @@ export async function createDirectory(context, virtualPath) {
 export async function deleteItem(context, virtualPath) {
   let sanitized;
   try {
-    sanitized = sanitizePath(virtualPath);
+    sanitized = await sanitizePath(virtualPath);
   } catch (err) {
     return handlePathError(err);
   }

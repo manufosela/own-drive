@@ -175,7 +175,7 @@ export class NasIndexer {
    * Index all configured mount points sequentially.
    */
   async indexAll() {
-    const mounts = getMountPoints();
+    const mounts = await getMountPoints();
     for (const { virtualPath, realPath } of mounts) {
       if (this.#controller?.signal.aborted) break;
       await this.indexMount(virtualPath, realPath);

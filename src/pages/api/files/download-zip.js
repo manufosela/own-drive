@@ -30,7 +30,7 @@ export async function POST(context) {
   for (const virtualPath of paths) {
     let sanitized;
     try {
-      sanitized = sanitizePath(virtualPath);
+      sanitized = await sanitizePath(virtualPath);
     } catch (err) {
       if (err instanceof PathError || err.name === 'PathError') {
         return jsonResponse({ error: `${virtualPath}: ${err.message}` }, err.statusCode);
