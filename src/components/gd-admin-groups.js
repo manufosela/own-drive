@@ -17,6 +17,7 @@ export class GdAdminGroups extends LitElement {
     _form: { state: true },
     _expandedGroup: { state: true },
     _members: { state: true },
+    _pendingDelete: { state: true },
   };
 
   constructor() {
@@ -36,6 +37,8 @@ export class GdAdminGroups extends LitElement {
     this._expandedGroup = null;
     /** @type {Array<{id: number, email: string, display_name: string, joined_at: string}>} */
     this._members = [];
+    /** @type {{id: number, name: string}|null} */
+    this._pendingDelete = null;
   }
 
   /** @type {AbortController|null} */
@@ -85,12 +88,17 @@ export class GdAdminGroups extends LitElement {
     .member-add select { font-size: 12px; padding: 4px 6px; border: 1px solid var(--color-border, #dadce0); border-radius: 4px; background: var(--color-surface, #fff); color: var(--color-text, #202124); flex: 1; max-width: 300px; }
     .loading { text-align: center; padding: 40px; color: var(--color-text-secondary); }
     .empty-state { text-align: center; padding: 24px; color: var(--color-text-secondary, #5f6368); }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .modal { background: var(--color-surface, #fff); border-radius: 8px; padding: 24px; max-width: 400px; width: 90%; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
+    .modal h3 { margin: 0 0 12px; font-size: 16px; font-weight: 500; color: var(--color-text, #202124); }
+    .modal p { margin: 0 0 20px; font-size: 13px; color: var(--color-text-secondary, #5f6368); }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
   `;
 
   updated(changed) {
-    if (this._mode === 'create' || this._mode === 'edit') {
+    if (changed.has('_mode') && (this._mode === 'create' || this._mode === 'edit')) {
       this.updateComplete.then(() => this._setupFocusTrap());
-    } else if (this._focusTrapController) {
+    } else if (changed.has('_mode') && this._mode === 'list' && this._focusTrapController) {
       this._focusTrapController.abort();
       this._focusTrapController = null;
     }
@@ -157,6 +165,18 @@ export class GdAdminGroups extends LitElement {
       ${this._error ? html`<div class="error-banner" aria-live="polite">${this._error}</div>` : nothing}
       ${this._message ? html`<div class="success-banner" aria-live="polite">${this._message}</div>` : nothing}
       ${this._mode === 'list' ? this._renderList() : this._renderForm()}
+      ${this._pendingDelete ? html`
+        <div class="modal-overlay" @click=${() => { this._pendingDelete = null; }}>
+          <div class="modal" @click=${e => e.stopPropagation()}>
+            <h3>Eliminar grupo</h3>
+            <p>¿Estás seguro de que quieres eliminar el grupo <strong>"${this._pendingDelete.name}"</strong>? Esta acción no se puede deshacer.</p>
+            <div class="modal-actions">
+              <button class="btn btn-secondary" @click=${() => { this._pendingDelete = null; }}>Cancelar</button>
+              <button class="btn btn-danger" @click=${() => this._executeDelete()}>Eliminar</button>
+            </div>
+          </div>
+        </div>
+      ` : nothing}
     `;
   }
 
@@ -304,7 +324,14 @@ export class GdAdminGroups extends LitElement {
   }
 
   /** @param {{id: number, name: string}} group */
-  async _confirmDelete(group) {
+  _confirmDelete(group) {
+    this._pendingDelete = group;
+  }
+
+  async _executeDelete() {
+    const group = this._pendingDelete;
+    this._pendingDelete = null;
+    if (!group) return;
     this._error = '';
     this._message = '';
     try {
