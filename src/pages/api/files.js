@@ -9,6 +9,9 @@ import { listDirectorySorted } from '../../lib/file-lister.js';
 /** Synology system folders to hide from listings */
 const HIDDEN_ENTRIES = new Set(['#recycle', '@eaDir']);
 
+/** Suffixes to hide from listings (e.g. Jellyfin trickplay metadata) */
+const HIDDEN_SUFFIXES = ['.trickplay'];
+
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
@@ -82,7 +85,7 @@ export async function GET(context) {
   } else {
     // Fallback: filesystem-based listing (original logic)
     const entries = fs.readdirSync(sanitized.realPath, { withFileTypes: true });
-    const filtered = entries.filter((entry) => !HIDDEN_ENTRIES.has(entry.name));
+    const filtered = entries.filter((entry) => !HIDDEN_ENTRIES.has(entry.name) && !HIDDEN_SUFFIXES.some(s => entry.name.endsWith(s)));
 
     filtered.sort((a, b) => {
       const aIsDir = a.isDirectory();

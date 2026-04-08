@@ -5,6 +5,9 @@ import { query } from './db.js';
 /** Synology system folders to hide from listings */
 const HIDDEN_ENTRIES = new Set(['#recycle', '@eaDir']);
 
+/** Suffixes to hide from listings (e.g. Jellyfin trickplay metadata) */
+const HIDDEN_SUFFIXES = ['.trickplay'];
+
 /** Allowed sort columns mapped to SQL expressions */
 const SORT_COLUMNS = {
   name: 'name_lower',
@@ -29,13 +32,17 @@ export async function listDirectorySorted({ virtualPath, realPath, sortBy, sortD
   try {
     // Read FS entries (fast, just names) for reconciliation check
     const fsEntries = fs.readdirSync(realPath, { withFileTypes: true });
-    const filtered = fsEntries.filter((e) => !HIDDEN_ENTRIES.has(e.name));
+    const filtered = fsEntries.filter((e) => !HIDDEN_ENTRIES.has(e.name) && !HIDDEN_SUFFIXES.some(s => e.name.endsWith(s)));
     const fsCount = filtered.length;
+
+    // Build SQL exclusion clause for hidden suffixes
+    const suffixClauses = HIDDEN_SUFFIXES.map((_, i) => `AND name NOT LIKE $${i + 2}`).join(' ');
+    const suffixParams = HIDDEN_SUFFIXES.map(s => `%${s}`);
 
     // Fetch all indexed virtual_paths for this parent (used for set comparison + reconciliation)
     const indexedResult = await query(
-      'SELECT virtual_path FROM file_index WHERE parent_path = $1',
-      [virtualPath]
+      `SELECT virtual_path FROM file_index WHERE parent_path = $1 ${suffixClauses}`,
+      [virtualPath, ...suffixParams]
     );
     const indexedSet = new Set(indexedResult.rows.map((r) => r.virtual_path));
 
@@ -64,13 +71,14 @@ export async function listDirectorySorted({ virtualPath, realPath, sortBy, sortD
       : `${col} ${dir}, name_lower ASC, virtual_path ASC`;
 
     const offset = (page - 1) * limit;
+    const listParamOffset = suffixParams.length + 1;
     const listResult = await query(
       `SELECT name, file_type AS type, size, modified, virtual_path AS path
        FROM file_index
-       WHERE parent_path = $1
+       WHERE parent_path = $1 ${suffixClauses}
        ORDER BY ${orderClause}
-       LIMIT $2 OFFSET $3`,
-      [virtualPath, limit, offset]
+       LIMIT $${listParamOffset + 1} OFFSET $${listParamOffset + 2}`,
+      [virtualPath, ...suffixParams, limit, offset]
     );
 
     const items = listResult.rows.map((row) => ({
