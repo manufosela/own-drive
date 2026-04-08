@@ -2286,7 +2286,12 @@ export class GdFileExplorer extends LitElement {
         });
       }
 
-      const book = window.ePub(url);
+      // Fetch the EPUB as ArrayBuffer so epub.js doesn't try to load internal files from the page URL
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('No se pudo descargar el archivo EPUB');
+      const arrayBuffer = await response.arrayBuffer();
+
+      const book = window.ePub(arrayBuffer);
 
       // Clear loading indicator
       container.innerHTML = '';
