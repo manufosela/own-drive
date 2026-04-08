@@ -86,12 +86,12 @@ function listCbzEntries(filePath) {
 }
 
 /**
- * Lists entries in a CBR (RAR) archive using `unrar lb`.
+ * Lists entries in a CBR (RAR) archive using `unrar -t` (unrar-free).
  * @param {string} filePath
  * @returns {string[]}
  */
 function listCbrEntries(filePath) {
-  const output = execFileSync('unrar', ['lb', filePath], { encoding: 'utf8' });
+  const output = execFileSync('unrar', ['-t', filePath], { encoding: 'utf8' });
   return output
     .split('\n')
     .map((line) => line.trim())
