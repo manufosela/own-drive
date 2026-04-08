@@ -15,7 +15,7 @@ RUN npm run build
 
 # Production
 FROM base AS runtime
-RUN apk add --no-cache unzip && \
+RUN apk add --no-cache unzip p7zip && \
     apk add --no-cache --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing unrar-free
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
