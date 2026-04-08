@@ -1,8 +1,8 @@
 ---
 /**
- * Auth callback route.
- * Receives the session JWT from Auth&Sign after successful login,
- * stores it as an httpOnly cookie, and redirects to the original page.
+ * Google OAuth2 callback route.
+ * Receives authorization code from Google, exchanges it for tokens,
+ * stores the ID token as an httpOnly cookie, and redirects.
  */
 
 import { config } from '../../lib/config.js';
@@ -10,17 +10,45 @@ import { verifyToken, resolveUser } from '../../lib/auth-middleware.js';
 import { logAudit, getClientIp } from '../../lib/audit-logger.js';
 
 const url = new URL(Astro.request.url);
-const token = url.searchParams.get('token');
-const state = url.searchParams.get('state');
+const code = url.searchParams.get('code');
+const state = url.searchParams.get('state') || '/';
 
-if (!token) {
-  return new Response('Missing token parameter', { status: 400 });
+if (!code) {
+  return new Response('Missing authorization code', { status: 400 });
 }
 
+// Build callback URL matching what was sent to Google
+const host = Astro.request.headers.get('host') || Astro.url.host;
 const proto = Astro.request.headers.get('x-forwarded-proto') || Astro.url.protocol.replace(':', '');
+const redirectUri = `${proto}://${host}/auth/callback`;
+
+// Exchange authorization code for tokens
+const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  body: new URLSearchParams({
+    code,
+    client_id: config.auth.googleClientId,
+    client_secret: config.auth.googleClientSecret,
+    redirect_uri: redirectUri,
+    grant_type: 'authorization_code',
+  }),
+});
+
+if (!tokenResponse.ok) {
+  return new Response('Token exchange failed', { status: 401 });
+}
+
+const tokens = await tokenResponse.json();
+const idToken = tokens.id_token;
+
+if (!idToken) {
+  return new Response('No ID token received', { status: 401 });
+}
+
 const isSecure = proto === 'https';
 
-Astro.cookies.set('auth_token', token, {
+Astro.cookies.set('auth_token', idToken, {
   httpOnly: true,
   secure: isSecure,
   sameSite: 'lax',
@@ -30,13 +58,12 @@ Astro.cookies.set('auth_token', token, {
 
 // Audit: log login event (best-effort)
 try {
-  const payload = await verifyToken(token);
+  const payload = await verifyToken(idToken);
   if (payload) {
     const user = await resolveUser(payload);
     if (user) logAudit({ userId: user.id, action: 'login', path: '/', ipAddress: getClientIp(Astro) });
   }
 } catch { /* best-effort */ }
 
-const redirectTo = state || '/';
-return Astro.redirect(redirectTo);
+return Astro.redirect(state);
 ---

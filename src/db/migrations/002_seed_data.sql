@@ -13,13 +13,13 @@ INSERT INTO groups (name, description) VALUES
 -- Usuario admin inicial (Admin User)
 -- ============================================
 INSERT INTO users (external_id, email, display_name, is_admin) VALUES
-  ('auth_admin', 'manufosela@gmail.com', 'Admin User', TRUE);
+  ('auth_admin', 'admin@example.com', 'Admin User', TRUE);
 
 -- Admin pertenece al grupo admins
 INSERT INTO user_groups (user_id, group_id)
 SELECT u.id, g.id
 FROM users u, groups g
-WHERE u.email = 'manufosela@gmail.com'
+WHERE u.email = 'admin@example.com'
   AND g.name IN ('admins');
 
 -- ============================================
@@ -36,10 +36,10 @@ SELECT
   'r',
   TRUE
 FROM users u, groups g
-WHERE u.email = 'manufosela@gmail.com' AND g.name = 'admins';
+WHERE u.email = 'admin@example.com' AND g.name = 'admins';
 
 -- ============================================
 -- Cuota para admin (500GB)
 -- ============================================
 INSERT INTO quotas (user_id, max_bytes)
-SELECT id, 536870912000 FROM users WHERE email = 'manufosela@gmail.com';
+SELECT id, 536870912000 FROM users WHERE email = 'admin@example.com';

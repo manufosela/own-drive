@@ -56,11 +56,6 @@ describe('gd-admin-users', () => {
     expect(el._loading).toBe(false);
   });
 
-  it('should store auth URL', () => {
-    el.authUrl = 'https://auth.geniova.com';
-    expect(el.authUrl).toBe('https://auth.geniova.com');
-  });
-
   it('should handle error on load', async () => {
     mockGetUsers.mockRejectedValueOnce(new Error('Network error'));
     await el._loadUsers();

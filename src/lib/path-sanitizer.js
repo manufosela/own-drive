@@ -3,13 +3,11 @@ import fs from 'node:fs';
 
 /**
  * Mount points virtuales → reales.
- * Las rutas de la API usan paths virtuales (/datosnas/..., /no-comun/...)
- * que se mapean a los mount points reales del filesystem.
+ * Las rutas de la API usan paths virtuales que se mapean a los mount points reales del filesystem.
  * @type {Record<string, string>}
  */
 const MOUNT_MAP = {
-  '/datosnas': process.env.NAS_DATOSNAS || '/mnt/datosnas',
-  '/no-comun': process.env.NAS_NOCOMUN || '/mnt/nocomun',
+  '/media/raid5': process.env.STORAGE_MOUNT || '/media/raid5',
 };
 
 /** @type {string[]} */

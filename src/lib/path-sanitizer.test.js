@@ -19,34 +19,27 @@ describe('path-sanitizer', () => {
   });
 
   describe('sanitizePath', () => {
-    it('should resolve a valid /datosnas path', () => {
-      const result = sanitizePath('/datosnas/carpeta/fichero.stl');
-      expect(result.virtualPath).toBe('/datosnas/carpeta/fichero.stl');
-      expect(result.realPath).toBe(path.resolve('/mnt/datosnas/carpeta/fichero.stl'));
-      expect(result.mountPoint).toBe('/datosnas');
-    });
-
-    it('should resolve a valid /no-comun path', () => {
-      const result = sanitizePath('/no-comun/docs/file.pdf');
-      expect(result.virtualPath).toBe('/no-comun/docs/file.pdf');
-      expect(result.realPath).toBe(path.resolve('/mnt/nocomun/docs/file.pdf'));
-      expect(result.mountPoint).toBe('/no-comun');
+    it('should resolve a valid /media/raid5 path', () => {
+      const result = sanitizePath('/media/raid5/carpeta/fichero.stl');
+      expect(result.virtualPath).toBe('/media/raid5/carpeta/fichero.stl');
+      expect(result.realPath).toBe(path.resolve('/media/raid5/carpeta/fichero.stl'));
+      expect(result.mountPoint).toBe('/media/raid5');
     });
 
     it('should resolve mount point root', () => {
-      const result = sanitizePath('/datosnas');
-      expect(result.virtualPath).toBe('/datosnas');
-      expect(result.realPath).toBe(path.resolve('/mnt/datosnas/'));
+      const result = sanitizePath('/media/raid5');
+      expect(result.virtualPath).toBe('/media/raid5');
+      expect(result.realPath).toBe(path.resolve('/media/raid5/'));
     });
 
     it('should normalize double slashes', () => {
-      const result = sanitizePath('/datosnas//carpeta///fichero.stl');
-      expect(result.virtualPath).toBe('/datosnas/carpeta/fichero.stl');
+      const result = sanitizePath('/media/raid5//carpeta///fichero.stl');
+      expect(result.virtualPath).toBe('/media/raid5/carpeta/fichero.stl');
     });
 
     it('should normalize trailing slashes', () => {
-      const result = sanitizePath('/datosnas/carpeta/');
-      expect(result.virtualPath).toBe('/datosnas/carpeta');
+      const result = sanitizePath('/media/raid5/carpeta/');
+      expect(result.virtualPath).toBe('/media/raid5/carpeta');
     });
 
     it('should reject empty path', () => {
@@ -64,15 +57,15 @@ describe('path-sanitizer', () => {
     });
 
     it('should reject null bytes', () => {
-      expect(() => sanitizePath('/datosnas/file\0.stl')).toThrow('null bytes');
+      expect(() => sanitizePath('/media/raid5/file\0.stl')).toThrow('null bytes');
     });
 
     it('should reject path traversal with ../', () => {
-      expect(() => sanitizePath('/datosnas/../../etc/passwd')).toThrow(PathError);
+      expect(() => sanitizePath('/media/raid5/../../etc/passwd')).toThrow(PathError);
     });
 
     it('should reject path traversal normalized by posix.normalize', () => {
-      expect(() => sanitizePath('/datosnas/carpeta/../../..')).toThrow(PathError);
+      expect(() => sanitizePath('/media/raid5/carpeta/../../..')).toThrow(PathError);
     });
 
     it('should reject paths not starting with a valid mount point', () => {
@@ -85,24 +78,23 @@ describe('path-sanitizer', () => {
 
     it('should check symlinks when file exists', () => {
       vi.mocked(fs.existsSync).mockReturnValue(true);
-      // Symlink that stays inside mount → should pass
-      vi.mocked(fs.realpathSync).mockReturnValue('/mnt/datosnas/real-file.stl');
+      vi.mocked(fs.realpathSync).mockReturnValue('/media/raid5/real-file.stl');
 
-      const result = sanitizePath('/datosnas/link.stl');
-      expect(result.realPath).toBe(path.resolve('/mnt/datosnas/link.stl'));
+      const result = sanitizePath('/media/raid5/link.stl');
+      expect(result.realPath).toBe(path.resolve('/media/raid5/link.stl'));
     });
 
     it('should reject symlinks that escape mount points', () => {
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.realpathSync).mockReturnValue('/etc/shadow');
 
-      expect(() => sanitizePath('/datosnas/evil-link')).toThrow('symlink escapes');
+      expect(() => sanitizePath('/media/raid5/evil-link')).toThrow('symlink escapes');
     });
 
     it('should return correct mountPoint and realMountPoint', () => {
-      const result = sanitizePath('/datosnas/test');
-      expect(result.mountPoint).toBe('/datosnas');
-      expect(result.realMountPoint).toBe(path.resolve('/mnt/datosnas'));
+      const result = sanitizePath('/media/raid5/test');
+      expect(result.mountPoint).toBe('/media/raid5');
+      expect(result.realMountPoint).toBe(path.resolve('/media/raid5'));
     });
 
     it('should have statusCode on PathError', () => {
@@ -117,17 +109,17 @@ describe('path-sanitizer', () => {
 
   describe('sanitizeNewPath', () => {
     it('should resolve a valid new path', () => {
-      const result = sanitizeNewPath('/datosnas/nueva-carpeta/file.stl');
-      expect(result.virtualPath).toBe('/datosnas/nueva-carpeta/file.stl');
-      expect(result.realPath).toBe(path.resolve('/mnt/datosnas/nueva-carpeta/file.stl'));
+      const result = sanitizeNewPath('/media/raid5/nueva-carpeta/file.stl');
+      expect(result.virtualPath).toBe('/media/raid5/nueva-carpeta/file.stl');
+      expect(result.realPath).toBe(path.resolve('/media/raid5/nueva-carpeta/file.stl'));
     });
 
     it('should reject traversal on new paths', () => {
-      expect(() => sanitizeNewPath('/datosnas/../../etc')).toThrow(PathError);
+      expect(() => sanitizeNewPath('/media/raid5/../../etc')).toThrow(PathError);
     });
 
     it('should reject null bytes on new paths', () => {
-      expect(() => sanitizeNewPath('/datosnas/file\0.txt')).toThrow('null bytes');
+      expect(() => sanitizeNewPath('/media/raid5/file\0.txt')).toThrow('null bytes');
     });
 
     it('should reject empty new path', () => {
@@ -139,26 +131,23 @@ describe('path-sanitizer', () => {
     });
 
     it('should not check symlinks (file does not exist yet)', () => {
-      // Clear previous calls from other tests
       vi.mocked(fs.existsSync).mockClear();
-      const result = sanitizeNewPath('/datosnas/new-dir/new-file.stl');
+      const result = sanitizeNewPath('/media/raid5/new-dir/new-file.stl');
       expect(fs.existsSync).not.toHaveBeenCalled();
-      expect(result.realPath).toBe(path.resolve('/mnt/datosnas/new-dir/new-file.stl'));
+      expect(result.realPath).toBe(path.resolve('/media/raid5/new-dir/new-file.stl'));
     });
   });
 
   describe('getMountPoints', () => {
     it('should return all configured mount points', () => {
       const mounts = getMountPoints();
-      expect(mounts).toHaveLength(2);
-      expect(mounts[0].virtualPath).toBe('/datosnas');
-      expect(mounts[1].virtualPath).toBe('/no-comun');
+      expect(mounts).toHaveLength(1);
+      expect(mounts[0].virtualPath).toBe('/media/raid5');
     });
 
     it('should include real paths', () => {
       const mounts = getMountPoints();
-      expect(mounts[0].realPath).toContain('datosnas');
-      expect(mounts[1].realPath).toContain('nocomun');
+      expect(mounts[0].realPath).toContain('raid5');
     });
   });
 

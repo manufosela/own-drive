@@ -2,7 +2,7 @@
 -- Geniova Drive: esquema inicial completo
 
 -- ============================================
--- USERS (sincronizados con Auth&Sign)
+-- USERS (autenticados con Google OAuth)
 -- ============================================
 CREATE TABLE users (
   id SERIAL PRIMARY KEY,
