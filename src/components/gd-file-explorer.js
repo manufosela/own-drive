@@ -2275,15 +2275,19 @@ export class GdFileExplorer extends LitElement {
   async _initEpubViewer(container) {
     const url = container.dataset.url;
     try {
-      // epub.js registers as window.ePub — load via script tag
+      // epub.js requires JSZip — load both via script tags
+      const loadScript = (src) => new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+      if (!window.JSZip) {
+        await loadScript('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
+      }
       if (!window.ePub) {
-        await new Promise((resolve, reject) => {
-          const script = document.createElement('script');
-          script.src = 'https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js';
-          script.onload = resolve;
-          script.onerror = reject;
-          document.head.appendChild(script);
-        });
+        await loadScript('https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js');
       }
 
       // Fetch the EPUB as ArrayBuffer so epub.js doesn't try to load internal files from the page URL
