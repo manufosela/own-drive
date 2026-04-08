@@ -3231,19 +3231,19 @@ export class GdFileExplorer extends LitElement {
     const file = this._inlineVideoFile;
     const videoUrl = this.#api.getPreviewUrl(file.path);
     return html`
-      <div class="inline-video">
+      <div class="inline-video" @click=${(e) => e.stopPropagation()}>
         <div class="inline-video-header">
           <span title="${file.name}">${file.name}</span>
           <div style="display:flex;gap:4px">
-            <button @click=${() => this._downloadFile(file.path)} title="Descargar">
+            <button @click=${(e) => { e.stopPropagation(); this._downloadFile(file.path); }} title="Descargar">
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
             </button>
-            <button @click=${() => { this._inlineVideoFile = null; }} title="Cerrar">
+            <button @click=${(e) => { e.stopPropagation(); this._inlineVideoFile = null; }} title="Cerrar">
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
             </button>
           </div>
         </div>
-        <video controls autoplay src="${videoUrl}" style="max-width:100%;max-height:70vh"></video>
+        <video controls src="${videoUrl}"></video>
       </div>
     `;
   }
