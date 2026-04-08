@@ -705,7 +705,7 @@ export class GdFileExplorer extends LitElement {
     .preview-panel .preview-body {
       flex: 1;
       min-height: 400px;
-      overflow: hidden;
+      overflow: auto;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -959,6 +959,7 @@ export class GdFileExplorer extends LitElement {
     /* EPUB viewer */
     .epub-viewer {
       width: 100%; position: relative; background: var(--color-surface, #fff);
+      align-self: flex-start;
     }
     .epub-viewer .epub-content {
       overflow: hidden; position: relative;
@@ -982,13 +983,14 @@ export class GdFileExplorer extends LitElement {
 
     /* Comic viewer (CBZ/CBR) */
     .comic-viewer {
-      width: 100%; height: 100%; display: flex; flex-direction: column; background: #1a1a1a;
+      width: 100%; display: flex; flex-direction: column; background: #1a1a1a;
+      align-self: flex-start;
     }
     .comic-viewer .comic-page-container {
-      flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative;
+      display: flex; align-items: center; justify-content: center; position: relative;
     }
     .comic-viewer .comic-page-container img {
-      max-width: 100%; max-height: 100%; object-fit: contain;
+      max-width: 100%; max-height: 85vh; object-fit: contain;
     }
     .comic-viewer .comic-nav {
       display: flex; align-items: center; justify-content: space-between; padding: 8px 12px;
@@ -2399,7 +2401,10 @@ export class GdFileExplorer extends LitElement {
     try {
       // Fetch page list from server
       const res = await fetch(`/api/files/comic-pages?path=${encodeURIComponent(filePath)}`);
-      if (!res.ok) throw new Error('No se pudo cargar el comic');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Error ${res.status}`);
+      }
       const data = await res.json();
 
       if (!data.pages || data.pages.length === 0) {
