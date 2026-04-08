@@ -86,16 +86,20 @@ function listCbzEntries(filePath) {
 }
 
 /**
- * Lists entries in a CBR (RAR) archive using `unrar -t` (unrar-free).
+ * Lists entries in a CBR (RAR) archive using `unrar --list` (unrar-free).
+ * Output includes headers, so we filter to only lines that look like filenames.
  * @param {string} filePath
  * @returns {string[]}
  */
 function listCbrEntries(filePath) {
-  const output = execFileSync('unrar', ['-t', filePath], { encoding: 'utf8' });
-  return output
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const output = execFileSync('unrar', ['--list', filePath], { encoding: 'utf8' });
+  // unrar-free --list outputs headers + filenames + sizes mixed.
+  // Filenames are lines that contain a dot and extension, not starting with spaces/dashes.
+  const lines = output.split('\n').map((l) => l.trim()).filter(Boolean);
+  // Filter: keep lines that have a file extension and are not header lines
+  return lines.filter((line) =>
+    /\.\w{2,4}$/.test(line) && !line.startsWith('-') && !line.startsWith('Pathname')
+  );
 }
 
 /**

@@ -131,16 +131,16 @@ function listCbzEntries(filePath) {
 }
 
 /**
- * Lists entries in a CBR (RAR) archive using `unrar -t` (unrar-free).
+ * Lists entries in a CBR (RAR) archive using `unrar --list` (unrar-free).
  * @param {string} filePath
  * @returns {string[]}
  */
 function listCbrEntries(filePath) {
-  const output = execFileSync('unrar', ['-t', filePath], { encoding: 'utf8' });
-  return output
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const output = execFileSync('unrar', ['--list', filePath], { encoding: 'utf8' });
+  const lines = output.split('\n').map((l) => l.trim()).filter(Boolean);
+  return lines.filter((line) =>
+    /\.\w{2,4}$/.test(line) && !line.startsWith('-') && !line.startsWith('Pathname')
+  );
 }
 
 /**
@@ -154,13 +154,13 @@ function extractCbzEntry(filePath, entryName) {
 }
 
 /**
- * Extracts a single entry from a CBR (RAR) archive using `unrar -P` (unrar-free).
+ * Extracts a single entry from a CBR (RAR) archive using `unrar --print` (unrar-free).
  * @param {string} filePath
  * @param {string} entryName
  * @returns {Buffer}
  */
 function extractCbrEntry(filePath, entryName) {
-  return execFileSync('unrar', ['-P', filePath, entryName], { maxBuffer: 50 * 1024 * 1024 });
+  return execFileSync('unrar', ['--print', filePath, entryName], { maxBuffer: 50 * 1024 * 1024 });
 }
 
 /**

@@ -636,15 +636,14 @@ export class GdFileExplorer extends LitElement {
     .split-view {
       display: flex;
       gap: 0;
-      flex: 1;
-      min-height: 60vh;
+      height: 80vh;
       overflow: hidden;
     }
 
     .split-view .file-list-area {
       flex: 1;
       min-width: 0;
-      overflow: auto;
+      overflow-y: auto;
     }
 
     /* Preview side panel (desktop) */
@@ -656,7 +655,7 @@ export class GdFileExplorer extends LitElement {
       display: flex;
       flex-direction: column;
       background: var(--color-surface, #fff);
-      overflow: hidden;
+      overflow-y: auto;
     }
 
     .preview-panel .preview-header {
@@ -703,13 +702,11 @@ export class GdFileExplorer extends LitElement {
     }
 
     .preview-panel .preview-body {
-      flex: 1;
-      min-height: 400px;
-      overflow: auto;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
       background: var(--color-bg, #f8f9fa);
+      min-height: 300px;
     }
 
     .preview-panel .preview-body iframe {
