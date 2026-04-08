@@ -64,6 +64,7 @@ export class GdFileExplorer extends LitElement {
     _comicPages: { state: true },
     _comicCurrentPage: { state: true },
     _inlineVideoFile: { state: true },
+    _inlineAudioFile: { state: true },
   };
 
   constructor() {
@@ -174,6 +175,8 @@ export class GdFileExplorer extends LitElement {
     this._comicCurrentPage = 0;
     /** @type {FileItem|null} Video playing inline below the file list */
     this._inlineVideoFile = null;
+    /** @type {FileItem|null} Audio playing inline below the file row */
+    this._inlineAudioFile = null;
   }
 
   /** @type {ApiClient} */
@@ -1024,6 +1027,19 @@ export class GdFileExplorer extends LitElement {
       width: 100%; max-height: 70vh; display: block;
     }
 
+    /* Inline audio player */
+    .inline-audio {
+      display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+      background: var(--color-bg, #f8f9fa); border-top: 1px solid var(--color-border, #dadce0);
+    }
+    .inline-audio audio { flex: 1; height: 36px; }
+    .inline-audio-close {
+      background: none; border: none; cursor: pointer; padding: 4px;
+      color: var(--color-text-secondary, #5f6368); border-radius: 4px; flex-shrink: 0;
+    }
+    .inline-audio-close:hover { background: var(--color-hover, #f1f3f4); }
+    .inline-audio-close svg { width: 16px; height: 16px; }
+
     .dicom-slice-indicator {
       position: absolute;
       top: 8px;
@@ -1801,7 +1817,7 @@ export class GdFileExplorer extends LitElement {
                       CBCT
                     </button>
                   ` : nothing}`
-                : html`<button @click=${() => this._openPreview(item)} title=${item.name}>${this._getPreviewType(item.name) === 'video' ? html`<svg class="play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>` : nothing}${item.name}</button>`
+                : html`<button @click=${() => this._openPreview(item)} title=${item.name}>${['video', 'audio'].includes(this._getPreviewType(item.name)) ? html`<svg class="play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>` : nothing}${item.name}</button>`
               }
               <span class="row-actions">
                 ${!isDir ? html`
@@ -1830,6 +1846,13 @@ export class GdFileExplorer extends LitElement {
           <tr>
             <td colspan="${this._hasManagePerms ? 4 : 3}" style="padding:0">
               ${this._renderInlineVideo()}
+            </td>
+          </tr>
+        ` : nothing}
+        ${this._inlineAudioFile && this._inlineAudioFile.path === item.path ? html`
+          <tr>
+            <td colspan="${this._hasManagePerms ? 4 : 3}" style="padding:0">
+              ${this._renderInlineAudio()}
             </td>
           </tr>
         ` : nothing}
@@ -2243,8 +2266,12 @@ export class GdFileExplorer extends LitElement {
     if (type === 'video') {
       this._closePreview();
       this._inlineVideoFile = item;
+    } else if (type === 'audio') {
+      this._closePreview();
+      this._inlineAudioFile = item;
     } else {
       this._inlineVideoFile = null;
+      this._inlineAudioFile = null;
       this._previewFile = item;
     }
   }
@@ -2277,6 +2304,7 @@ export class GdFileExplorer extends LitElement {
     this._comicCurrentPage = 0;
     this._previewFile = null;
     this._inlineVideoFile = null;
+    this._inlineAudioFile = null;
   }
 
   async _initEpubViewer(container) {
@@ -3264,6 +3292,20 @@ export class GdFileExplorer extends LitElement {
           </div>
         </div>
         <video controls autoplay src="${videoUrl}" @click=${(e) => e.stopPropagation()}></video>
+      </div>
+    `;
+  }
+
+  /** Inline audio player below the file row */
+  _renderInlineAudio() {
+    const file = this._inlineAudioFile;
+    const audioUrl = this.#api.getPreviewUrl(file.path);
+    return html`
+      <div class="inline-audio" @click=${(e) => e.stopPropagation()}>
+        <audio controls autoplay src="${audioUrl}" style="width:100%"></audio>
+        <button class="inline-audio-close" @click=${(e) => { e.stopPropagation(); this._inlineAudioFile = null; }} title="Cerrar">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
       </div>
     `;
   }
