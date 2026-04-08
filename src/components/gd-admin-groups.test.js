@@ -112,10 +112,15 @@ describe('gd-admin-groups', () => {
   });
 
   describe('delete group', () => {
-    it('should call deleteGroup and reload', async () => {
-      await el._confirmDelete({ id: 2, name: 'produccion' });
+    it('should show confirmation and delete on confirm', async () => {
+      el._confirmDelete({ id: 2, name: 'family' });
+      expect(el._pendingDelete).toEqual({ id: 2, name: 'family' });
+      expect(mockDeleteGroup).not.toHaveBeenCalled();
+
+      await el._executeDelete();
       expect(mockDeleteGroup).toHaveBeenCalledWith(2);
-      expect(el._message).toContain('produccion');
+      expect(el._message).toContain('family');
+      expect(el._pendingDelete).toBeNull();
     });
   });
 

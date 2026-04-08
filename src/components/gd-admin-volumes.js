@@ -14,6 +14,7 @@ export class GdAdminVolumes extends LitElement {
     _saving: { state: true },
     _mode: { state: true },
     _form: { state: true },
+    _pendingDelete: { state: true },
   };
 
   constructor() {
@@ -27,6 +28,8 @@ export class GdAdminVolumes extends LitElement {
     /** @type {'list'|'create'} */
     this._mode = 'list';
     this._form = { name: '', mount_path: '' };
+    /** @type {{id: number, name: string}|null} */
+    this._pendingDelete = null;
   }
 
   /** @type {AbortController|null} */
@@ -71,6 +74,11 @@ export class GdAdminVolumes extends LitElement {
     .mono { font-family: monospace; font-size: 12px; color: var(--color-text-secondary, #5f6368); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 300px; display: inline-block; }
     .loading { text-align: center; padding: 40px; color: var(--color-text-secondary); }
     .empty-state { text-align: center; padding: 24px; color: var(--color-text-secondary, #5f6368); }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .modal { background: var(--color-surface, #fff); border-radius: 8px; padding: 24px; max-width: 400px; width: 90%; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
+    .modal h3 { margin: 0 0 12px; font-size: 16px; font-weight: 500; color: var(--color-text, #202124); }
+    .modal p { margin: 0 0 20px; font-size: 13px; color: var(--color-text-secondary, #5f6368); }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
   `;
 
   updated(changed) {
@@ -139,6 +147,18 @@ export class GdAdminVolumes extends LitElement {
       ${this._error ? html`<div class="error-banner" aria-live="polite">${this._error}</div>` : nothing}
       ${this._message ? html`<div class="success-banner" aria-live="polite">${this._message}</div>` : nothing}
       ${this._mode === 'list' ? this._renderList() : this._renderForm()}
+      ${this._pendingDelete ? html`
+        <div class="modal-overlay" @click=${() => { this._pendingDelete = null; }}>
+          <div class="modal" @click=${e => e.stopPropagation()}>
+            <h3>Eliminar volumen</h3>
+            <p>¿Estás seguro de que quieres eliminar el volumen <strong>"${this._pendingDelete.name}"</strong>? Esta acción no se puede deshacer.</p>
+            <div class="modal-actions">
+              <button class="btn btn-secondary" @click=${() => { this._pendingDelete = null; }}>Cancelar</button>
+              <button class="btn btn-danger" @click=${() => this._executeDelete()}>Eliminar</button>
+            </div>
+          </div>
+        </div>
+      ` : nothing}
     `;
   }
 
@@ -259,7 +279,14 @@ export class GdAdminVolumes extends LitElement {
   }
 
   /** @param {{id: number, name: string}} vol */
-  async _confirmDelete(vol) {
+  _confirmDelete(vol) {
+    this._pendingDelete = vol;
+  }
+
+  async _executeDelete() {
+    const vol = this._pendingDelete;
+    this._pendingDelete = null;
+    if (!vol) return;
     this._error = '';
     this._message = '';
     try {

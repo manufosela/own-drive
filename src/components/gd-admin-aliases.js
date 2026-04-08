@@ -22,6 +22,7 @@ export class GdAdminAliases extends LitElement {
     _browseItems: { state: true },
     _browseLoading: { state: true },
     _volumes: { state: true },
+    _pendingDelete: { state: true },
   };
 
   constructor() {
@@ -48,6 +49,8 @@ export class GdAdminAliases extends LitElement {
     this._browseLoading = false;
     /** @type {Array<{id: number, name: string, mount_path: string, active: boolean}>} */
     this._volumes = [];
+    /** @type {{id: number, alias_name: string}|null} */
+    this._pendingDelete = null;
   }
 
   /** @type {AbortController|null} */
@@ -113,12 +116,17 @@ export class GdAdminAliases extends LitElement {
     .loading { text-align: center; padding: 40px; color: var(--color-text-secondary); }
     .mini-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--color-border); border-top-color: var(--color-primary, #1a73e8); border-radius: 50%; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .modal { background: var(--color-surface, #fff); border-radius: 8px; padding: 24px; max-width: 400px; width: 90%; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
+    .modal h3 { margin: 0 0 12px; font-size: 16px; font-weight: 500; color: var(--color-text, #202124); }
+    .modal p { margin: 0 0 20px; font-size: 13px; color: var(--color-text-secondary, #5f6368); }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
   `;
 
   updated(changed) {
-    if (this._mode === 'create' || this._mode === 'edit') {
+    if (changed.has('_mode') && (this._mode === 'create' || this._mode === 'edit')) {
       this.updateComplete.then(() => this._setupFocusTrap());
-    } else if (this._focusTrapController) {
+    } else if (changed.has('_mode') && this._mode === 'list' && this._focusTrapController) {
       this._focusTrapController.abort();
       this._focusTrapController = null;
     }
@@ -188,6 +196,18 @@ export class GdAdminAliases extends LitElement {
       ${this._message ? html`<div class="success-banner" aria-live="polite">${this._message}</div>` : nothing}
 
       ${this._mode === 'list' ? this._renderList() : this._renderForm()}
+      ${this._pendingDelete ? html`
+        <div class="modal-overlay" @click=${() => { this._pendingDelete = null; }}>
+          <div class="modal" @click=${e => e.stopPropagation()}>
+            <h3>Eliminar alias</h3>
+            <p>¿Estás seguro de que quieres eliminar el alias <strong>"${this._pendingDelete.alias_name}"</strong>? Esta acción no se puede deshacer.</p>
+            <div class="modal-actions">
+              <button class="btn btn-secondary" @click=${() => { this._pendingDelete = null; }}>Cancelar</button>
+              <button class="btn btn-danger" @click=${() => this._executeDelete()}>Eliminar</button>
+            </div>
+          </div>
+        </div>
+      ` : nothing}
     `;
   }
 
@@ -407,7 +427,14 @@ export class GdAdminAliases extends LitElement {
   }
 
   /** @param {{id: number, alias_name: string}} alias */
-  async _confirmDelete(alias) {
+  _confirmDelete(alias) {
+    this._pendingDelete = alias;
+  }
+
+  async _executeDelete() {
+    const alias = this._pendingDelete;
+    this._pendingDelete = null;
+    if (!alias) return;
     this._error = '';
     this._message = '';
     try {

@@ -75,10 +75,15 @@ describe('gd-admin-volumes', () => {
     expect(el._message).toContain('desactivado');
   });
 
-  it('should delete volume', async () => {
-    await el._confirmDelete({ id: 3, name: 'backup' });
+  it('should show confirmation and delete on confirm', async () => {
+    el._confirmDelete({ id: 3, name: 'backup' });
+    expect(el._pendingDelete).toEqual({ id: 3, name: 'backup' });
+    expect(mockDeleteVolume).not.toHaveBeenCalled();
+
+    await el._executeDelete();
     expect(mockDeleteVolume).toHaveBeenCalledWith(3);
     expect(el._message).toContain('eliminado');
+    expect(el._pendingDelete).toBeNull();
   });
 
   it('should handle error on load', async () => {
