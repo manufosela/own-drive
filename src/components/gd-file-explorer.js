@@ -60,6 +60,9 @@ export class GdFileExplorer extends LitElement {
     _anonymizeError: { state: true },
     _anonymizeSelectedTable: { state: true },
     _anonymizeResult: { state: true },
+    _epubBook: { state: true },
+    _comicPages: { state: true },
+    _comicCurrentPage: { state: true },
   };
 
   constructor() {
@@ -162,6 +165,12 @@ export class GdFileExplorer extends LitElement {
     this._anonymizeSelectedTable = null;
     /** @type {object|null} Result after anonymization */
     this._anonymizeResult = null;
+    /** @type {object|null} epub.js Book instance */
+    this._epubBook = null;
+    /** @type {Array<{name: string}>} Comic pages list */
+    this._comicPages = [];
+    /** @type {number} Current comic page index */
+    this._comicCurrentPage = 0;
   }
 
   /** @type {ApiClient} */
@@ -937,6 +946,50 @@ export class GdFileExplorer extends LitElement {
       pointer-events: none;
     }
 
+    /* EPUB viewer */
+    .epub-viewer {
+      width: 100%; height: 100%; display: flex; flex-direction: column; background: var(--color-surface, #fff);
+    }
+    .epub-viewer .epub-content {
+      flex: 1; overflow: hidden; position: relative;
+    }
+    .epub-viewer .epub-nav {
+      display: flex; align-items: center; justify-content: space-between; padding: 8px 12px;
+      border-top: 1px solid var(--color-border, #dadce0); background: var(--color-bg, #f8f9fa);
+    }
+    .epub-viewer .epub-nav button {
+      padding: 6px 16px; border: 1px solid var(--color-border, #dadce0); border-radius: 4px;
+      background: var(--color-surface, #fff); color: var(--color-text, #202124);
+      font-size: 13px; cursor: pointer;
+    }
+    .epub-viewer .epub-nav button:hover { background: var(--color-hover, #f1f3f4); }
+    .epub-viewer .epub-nav button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .epub-viewer .epub-nav span { font-size: 12px; color: var(--color-text-secondary, #5f6368); }
+    .epub-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; }
+
+    /* Comic viewer (CBZ/CBR) */
+    .comic-viewer {
+      width: 100%; height: 100%; display: flex; flex-direction: column; background: #1a1a1a;
+    }
+    .comic-viewer .comic-page-container {
+      flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative;
+    }
+    .comic-viewer .comic-page-container img {
+      max-width: 100%; max-height: 100%; object-fit: contain;
+    }
+    .comic-viewer .comic-nav {
+      display: flex; align-items: center; justify-content: space-between; padding: 8px 12px;
+      border-top: 1px solid #333; background: #222;
+    }
+    .comic-viewer .comic-nav button {
+      padding: 6px 16px; border: 1px solid #444; border-radius: 4px;
+      background: #333; color: #eee; font-size: 13px; cursor: pointer;
+    }
+    .comic-viewer .comic-nav button:hover { background: #444; }
+    .comic-viewer .comic-nav button:disabled { opacity: 0.3; cursor: not-allowed; }
+    .comic-viewer .comic-nav span { font-size: 12px; color: #aaa; }
+    .comic-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #aaa; }
+
     .dicom-slice-indicator {
       position: absolute;
       top: 8px;
@@ -1480,6 +1533,22 @@ export class GdFileExplorer extends LitElement {
         this.updateComplete.then(() => this._initStlViewer());
       } else if (previewType === 'markdown') {
         this.updateComplete.then(() => this._initMarkdownViewer());
+      } else if (previewType === 'epub') {
+        this.updateComplete.then(() => {
+          const epubEl = this.renderRoot.querySelector('.epub-viewer');
+          if (epubEl && !epubEl._initialized) {
+            epubEl._initialized = true;
+            this._initEpubViewer(epubEl);
+          }
+        });
+      } else if (previewType === 'comic') {
+        this.updateComplete.then(() => {
+          const comicEl = this.renderRoot.querySelector('.comic-viewer');
+          if (comicEl && !comicEl._initialized) {
+            comicEl._initialized = true;
+            this._initComicViewer(comicEl);
+          }
+        });
       } else if (previewType === 'dicom' || this._previewFile.type === 'cbct-folder') {
         this.updateComplete.then(() => this._initDicomViewer());
       } else if (previewType === 'text') {
@@ -2059,7 +2128,7 @@ export class GdFileExplorer extends LitElement {
     '.pdf', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp',
     '.txt', '.csv', '.json', '.xml', '.html', '.htm',
     '.mp4', '.webm', '.ogg', '.mp3', '.wav',
-    '.stl', '.md', '.dcm',
+    '.stl', '.md', '.dcm', '.epub', '.cbz', '.cbr',
     // Code & scripts
     '.bat', '.cmd', '.sh', '.bash', '.zsh', '.ps1',
     '.js', '.ts', '.jsx', '.tsx', '.css', '.scss', '.less',
@@ -2114,6 +2183,8 @@ export class GdFileExplorer extends LitElement {
     ].includes(ext)) return 'text';
     if (['.mp4', '.webm', '.ogg'].includes(ext)) return 'video';
     if (['.mp3', '.wav'].includes(ext)) return 'audio';
+    if (ext === '.epub') return 'epub';
+    if (['.cbz', '.cbr'].includes(ext)) return 'comic';
     return 'unknown';
   }
 
@@ -2150,7 +2221,137 @@ export class GdFileExplorer extends LitElement {
       this._cbctState = null;
     }
     this._textContent = null;
+    if (this._epubBook) { this._epubBook.destroy(); this._epubBook = null; }
+    if (this._epubCleanup) { this._epubCleanup(); this._epubCleanup = null; }
+    if (this._comicCleanup) { this._comicCleanup(); this._comicCleanup = null; }
+    this._comicPages = [];
+    this._comicCurrentPage = 0;
     this._previewFile = null;
+  }
+
+  async _initEpubViewer(container) {
+    const url = container.dataset.url;
+    try {
+      const { default: ePub } = await import('https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js');
+      const book = ePub(url);
+
+      // Clear loading indicator
+      container.innerHTML = '';
+
+      // Create content area and nav
+      const content = document.createElement('div');
+      content.className = 'epub-content';
+      container.appendChild(content);
+
+      const nav = document.createElement('div');
+      nav.className = 'epub-nav';
+      const prevBtn = document.createElement('button');
+      prevBtn.textContent = '← Anterior';
+      const pageInfo = document.createElement('span');
+      pageInfo.textContent = 'Cargando...';
+      const nextBtn = document.createElement('button');
+      nextBtn.textContent = 'Siguiente →';
+      nav.appendChild(prevBtn);
+      nav.appendChild(pageInfo);
+      nav.appendChild(nextBtn);
+      container.appendChild(nav);
+
+      const rend = book.renderTo(content, {
+        width: '100%',
+        height: '100%',
+        spread: 'none',
+      });
+
+      await rend.display();
+
+      rend.on('relocated', (location) => {
+        const current = location.start.displayed.page;
+        const total = location.start.displayed.total;
+        pageInfo.textContent = `${current} / ${total}`;
+        prevBtn.disabled = location.atStart;
+        nextBtn.disabled = location.atEnd;
+      });
+
+      prevBtn.addEventListener('click', () => rend.prev());
+      nextBtn.addEventListener('click', () => rend.next());
+
+      // Keyboard navigation
+      const keyHandler = (e) => {
+        if (e.key === 'ArrowLeft') rend.prev();
+        if (e.key === 'ArrowRight') rend.next();
+      };
+      document.addEventListener('keydown', keyHandler);
+      this._epubCleanup = () => document.removeEventListener('keydown', keyHandler);
+      this._epubBook = book;
+    } catch (err) {
+      container.innerHTML = `<div class="epub-loading"><p>Error: ${err.message}</p></div>`;
+    }
+  }
+
+  async _initComicViewer(container) {
+    const filePath = container.dataset.path;
+    try {
+      // Fetch page list from server
+      const res = await fetch(`/api/files/comic-pages?path=${encodeURIComponent(filePath)}`);
+      if (!res.ok) throw new Error('No se pudo cargar el comic');
+      const data = await res.json();
+
+      if (!data.pages || data.pages.length === 0) {
+        throw new Error('El comic no contiene páginas');
+      }
+
+      this._comicPages = data.pages;
+      this._comicCurrentPage = 0;
+
+      // Build viewer UI
+      container.innerHTML = '';
+
+      const pageContainer = document.createElement('div');
+      pageContainer.className = 'comic-page-container';
+      const img = document.createElement('img');
+      img.src = `/api/files/comic-page?path=${encodeURIComponent(filePath)}&page=0`;
+      img.alt = data.pages[0].name;
+      pageContainer.appendChild(img);
+      container.appendChild(pageContainer);
+
+      const nav = document.createElement('div');
+      nav.className = 'comic-nav';
+      const prevBtn = document.createElement('button');
+      prevBtn.textContent = '← Anterior';
+      prevBtn.disabled = true;
+      const pageInfo = document.createElement('span');
+      pageInfo.textContent = `1 / ${data.pages.length}`;
+      const nextBtn = document.createElement('button');
+      nextBtn.textContent = 'Siguiente →';
+      nextBtn.disabled = data.pages.length <= 1;
+      nav.appendChild(prevBtn);
+      nav.appendChild(pageInfo);
+      nav.appendChild(nextBtn);
+      container.appendChild(nav);
+
+      const goToPage = (idx) => {
+        if (idx < 0 || idx >= data.pages.length) return;
+        this._comicCurrentPage = idx;
+        img.src = `/api/files/comic-page?path=${encodeURIComponent(filePath)}&page=${idx}`;
+        img.alt = data.pages[idx].name;
+        pageInfo.textContent = `${idx + 1} / ${data.pages.length}`;
+        prevBtn.disabled = idx === 0;
+        nextBtn.disabled = idx === data.pages.length - 1;
+      };
+
+      prevBtn.addEventListener('click', () => goToPage(this._comicCurrentPage - 1));
+      nextBtn.addEventListener('click', () => goToPage(this._comicCurrentPage + 1));
+
+      // Keyboard navigation
+      const keyHandler = (e) => {
+        if (e.key === 'ArrowLeft') goToPage(this._comicCurrentPage - 1);
+        if (e.key === 'ArrowRight') goToPage(this._comicCurrentPage + 1);
+      };
+      document.addEventListener('keydown', keyHandler);
+      this._comicCleanup = () => document.removeEventListener('keydown', keyHandler);
+    } catch (err) {
+      container.innerHTML = `<div class="comic-loading"><p>Error: ${err.message}</p></div>`;
+    }
   }
 
   /** Dispose Three.js resources */
@@ -2947,6 +3148,16 @@ export class GdFileExplorer extends LitElement {
         <div id="${viewerId}" class="dicom-canvas-container"></div>
         <div class="dicom-loading"><div class="spinner"></div><p>${file.type === 'cbct-folder' ? 'Cargando serie CBCT...' : 'Cargando imagen DICOM...'}</p></div>
         <div class="dicom-hint">Arrastrar: brillo/contraste · Scroll: cambiar corte</div>
+      </div>`;
+    }
+    if (previewType === 'epub') {
+      return html`<div class="epub-viewer" data-url="${previewUrl}">
+        <div class="epub-loading"><div class="spinner"></div><p>Cargando libro...</p></div>
+      </div>`;
+    }
+    if (previewType === 'comic') {
+      return html`<div class="comic-viewer" data-path="${file.path}">
+        <div class="comic-loading"><div class="spinner"></div><p>Cargando comic...</p></div>
       </div>`;
     }
     return html`
