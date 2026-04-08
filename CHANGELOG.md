@@ -1,6 +1,41 @@
 # Changelog
 
-Historial de cambios de Geniova Drive.
+Historial de cambios de Own Drive.
+
+## v1.9.0 (2026-04-09)
+
+### Nuevas funcionalidades
+
+- Renombrado del proyecto a Own Drive (repo agnóstico, sin paths hardcodeados)
+- Autenticación con Google OAuth 2.0 (reemplaza Auth&Sign/geniova-auth)
+- Mount points dinámicos desde la tabla de volúmenes (sin configuración en código)
+- Visor de EPUB con lectura paginada y navegación con flechas de teclado
+- Visor de comics CBZ/CBR con navegación página a página
+- Reproductor de vídeo inline debajo del archivo con streaming (Range requests HTTP 206)
+- Reproductor de audio inline debajo del archivo con autoplay
+- Icono de play junto a archivos de vídeo y audio reproducibles
+- Soporte de formatos de vídeo: MP4, MKV, WebM, OGG, MOV, M4V
+- Soporte de formatos de audio: MP3, WAV, FLAC, AAC, M4A
+- Modal de confirmación antes de eliminar grupos, volúmenes y aliases
+- Botón de reindexación en el panel de administración de volúmenes
+- Filtrado de carpetas .trickplay (metadatos de Jellyfin) en los listados
+
+### Correcciones
+
+- Fix: focus trap no roba el foco al escribir en formularios de admin
+- Fix: servidor no se crashea al servir archivos grandes (streaming por chunks)
+- Fix: CBR funciona con unrar-free (sintaxis --list/--print)
+- Fix: EPUB carga como ArrayBuffer + JSZip para evitar errores de ruta
+- Fix: scroll independiente en panel de archivos y panel de previsualización
+- Fix: altura proporcional del visor EPUB con botones ‹ › superpuestos
+- Fix: .avi descarga directamente en vez de intentar reproducir
+
+### Mejoras internas
+
+- Eliminada dependencia vendor/geniova-auth
+- Deploy adaptado para miniPC personal (servidorix, Docker + PostgreSQL)
+- Seed data adaptado para uso personal (admin mjfosela@gmail.com)
+- Dockerfile incluye unzip, unrar-free y p7zip para extracción de comics
 
 ## v1.8.0 (2026-03-15)
 
