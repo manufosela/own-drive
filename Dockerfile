@@ -15,6 +15,7 @@ RUN npm run build
 
 # Production
 FROM base AS runtime
+RUN apk add --no-cache unzip unrar
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./package.json
