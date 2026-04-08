@@ -1649,7 +1649,6 @@ export class GdFileExplorer extends LitElement {
           ${this._renderPreviewPanel()}
         </div>
       ` : fileListContent}
-      ${this._inlineVideoFile ? this._renderInlineVideo() : nothing}
       ${hasOverlayPreview ? this._renderPreviewOverlay() : nothing}
       ${this._showMkdirDialog ? this._renderMkdirDialog() : nothing}
       ${this._showDeleteDialog ? this._renderDeleteDialog() : nothing}
@@ -1820,6 +1819,13 @@ export class GdFileExplorer extends LitElement {
           <td class="col-size">${item.type === 'file' ? this._formatSize(item.size) : '--'}</td>
           <td class="col-modified">${this._formatDate(item.modified)}</td>
         </tr>
+        ${this._inlineVideoFile && this._inlineVideoFile.path === item.path ? html`
+          <tr>
+            <td colspan="${this._hasManagePerms ? 4 : 3}" style="padding:0">
+              ${this._renderInlineVideo()}
+            </td>
+          </tr>
+        ` : nothing}
         ${isExpanded && children ? this._renderRows(children, depth + 1) : nothing}
         ${isExpanded && children && total > children.length ? html`
           <tr>
