@@ -1,0 +1,115 @@
+---
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+---
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Geniova Drive - Gestor de ficheros" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <script is:inline>
+      (function() {
+        var t = localStorage.getItem('gd-theme');
+        if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
+    <slot />
+  </body>
+</html>
+
+<style is:global>
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  :root,
+  :root[data-theme="light"] {
+    --color-primary: #1a73e8;
+    --color-primary-dark: #1557b0;
+    --color-bg: #f8f9fa;
+    --color-surface: #ffffff;
+    --color-text: #202124;
+    --color-text-secondary: #5f6368;
+    --color-border: #dadce0;
+    --color-border-light: #e8eaed;
+    --color-hover: #f1f3f4;
+    --color-success: #34a853;
+    --color-success-bg: #e6f4ea;
+    --color-success-text: #137333;
+    --color-error: #ea4335;
+    --color-error-bg: #fce8e6;
+    --color-error-text: #c5221f;
+    --color-info-bg: #e8f0fe;
+    --color-info-text: #174ea6;
+    --color-danger: #c5221f;
+    --color-danger-hover: rgba(197, 34, 31, 0.06);
+    --color-primary-disabled: #a8c7fa;
+    --color-dicom-bg: #000;
+    --color-dicom-text: #ccc;
+    --font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --radius: 8px;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
+    color-scheme: light;
+  }
+
+  :root[data-theme="dark"] {
+    --color-primary: #8ab4f8;
+    --color-primary-dark: #669df6;
+    --color-bg: #1e1e1e;
+    --color-surface: #292929;
+    --color-text: #e8eaed;
+    --color-text-secondary: #9aa0a6;
+    --color-border: #3c4043;
+    --color-border-light: #333639;
+    --color-hover: #333639;
+    --color-success: #81c995;
+    --color-success-bg: #1b3726;
+    --color-success-text: #81c995;
+    --color-error: #f28b82;
+    --color-error-bg: #3c1f1e;
+    --color-error-text: #f28b82;
+    --color-info-bg: #1a2744;
+    --color-info-text: #8ab4f8;
+    --color-danger: #f28b82;
+    --color-danger-hover: rgba(242, 139, 130, 0.1);
+    --color-primary-disabled: #5a7db5;
+    --color-dicom-bg: #000;
+    --color-dicom-text: #ccc;
+    --font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --radius: 8px;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+    color-scheme: dark;
+  }
+
+  html {
+    font-family: var(--font-family);
+    color: var(--color-text);
+    background-color: var(--color-bg);
+  }
+
+  body {
+    min-height: 100vh;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+</style>

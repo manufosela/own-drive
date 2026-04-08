@@ -1,0 +1,8 @@
+node_modules
+dist
+.git
+.env
+pgdata
+README.md
+.vscode
+.idea

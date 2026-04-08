@@ -1,0 +1,34 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { config } from '../lib/config.js';
+
+const user = Astro.locals.user;
+const isAdmin = user?.is_admin ?? false;
+const authUrl = config.auth.url;
+const userName = user?.display_name ?? '';
+const userEmail = user?.email ?? '';
+---
+
+<Layout title="Geniova Drive">
+  <gd-app data-admin={isAdmin} data-auth-url={authUrl} data-user-name={userName} data-user-email={userEmail}></gd-app>
+</Layout>
+
+<script>
+  import '../components/gd-app.js';
+
+  const el = document.querySelector('gd-app');
+  if (el) {
+    if (el.dataset.admin === 'true') {
+      el.isAdmin = true;
+    }
+    if (el.dataset.authUrl) {
+      el.authUrl = el.dataset.authUrl;
+    }
+    if (el.dataset.userName) {
+      el.userName = el.dataset.userName;
+    }
+    if (el.dataset.userEmail) {
+      el.userEmail = el.dataset.userEmail;
+    }
+  }
+</script>

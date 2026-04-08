@@ -1,0 +1,44 @@
+services:
+  app:
+    build: .
+    container_name: own-drive
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    volumes:
+      - /mnt/raid5:/mnt/raid5
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - own-drive-net
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: own-drive-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-own_drive}
+      POSTGRES_USER: ${POSTGRES_USER:-manu}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_in_production}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-manu} -d ${POSTGRES_DB:-own_drive}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - own-drive-net
+
+volumes:
+  pgdata:
+    driver: local
+
+networks:
+  own-drive-net:
+    driver: bridge
