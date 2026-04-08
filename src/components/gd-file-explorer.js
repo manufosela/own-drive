@@ -356,6 +356,10 @@ export class GdFileExplorer extends LitElement {
     .file-icon.file {
       color: var(--color-text-secondary, #5f6368);
     }
+    .play-icon {
+      width: 16px; height: 16px; margin-right: 4px; vertical-align: middle;
+      color: var(--color-primary, #1a73e8); flex-shrink: 0;
+    }
 
     /* States */
     .loading, .error-message, .empty-message {
@@ -1797,7 +1801,7 @@ export class GdFileExplorer extends LitElement {
                       CBCT
                     </button>
                   ` : nothing}`
-                : html`<button @click=${() => this._openPreview(item)} title=${item.name}>${item.name}</button>`
+                : html`<button @click=${() => this._openPreview(item)} title=${item.name}>${this._getPreviewType(item.name) === 'video' ? html`<svg class="play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>` : nothing}${item.name}</button>`
               }
               <span class="row-actions">
                 ${!isDir ? html`
@@ -2164,7 +2168,7 @@ export class GdFileExplorer extends LitElement {
   static _previewableExtensions = new Set([
     '.pdf', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp',
     '.txt', '.csv', '.json', '.xml', '.html', '.htm',
-    '.mp4', '.webm', '.ogg', '.mkv', '.avi', '.mov', '.m4v',
+    '.mp4', '.webm', '.ogg', '.mkv', '.mov', '.m4v',
     '.mp3', '.wav', '.flac', '.aac', '.m4a',
     '.stl', '.md', '.dcm', '.epub', '.cbz', '.cbr',
     // Code & scripts
@@ -2219,7 +2223,7 @@ export class GdFileExplorer extends LitElement {
       '.gitignore', '.dockerignore', '.htaccess',
       '.log', '.reg',
     ].includes(ext)) return 'text';
-    if (['.mp4', '.webm', '.ogg', '.mkv', '.avi', '.mov', '.m4v'].includes(ext)) return 'video';
+    if (['.mp4', '.webm', '.ogg', '.mkv', '.mov', '.m4v'].includes(ext)) return 'video';
     if (['.mp3', '.wav', '.flac', '.aac', '.m4a'].includes(ext)) return 'audio';
     if (ext === '.epub') return 'epub';
     if (['.cbz', '.cbr'].includes(ext)) return 'comic';
@@ -3259,7 +3263,7 @@ export class GdFileExplorer extends LitElement {
             </button>
           </div>
         </div>
-        <video controls src="${videoUrl}"></video>
+        <video controls autoplay src="${videoUrl}" @click=${(e) => e.stopPropagation()}></video>
       </div>
     `;
   }
