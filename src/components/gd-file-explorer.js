@@ -702,11 +702,11 @@ export class GdFileExplorer extends LitElement {
     }
 
     .preview-panel .preview-body {
+      flex: 1;
       display: flex;
-      align-items: flex-start;
+      align-items: stretch;
       justify-content: center;
       background: var(--color-bg, #f8f9fa);
-      min-height: 300px;
     }
 
     .preview-panel .preview-body iframe {
