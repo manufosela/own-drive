@@ -33,7 +33,7 @@ export async function GET(context) {
   // Sanitize path
   let sanitized;
   try {
-    sanitized = sanitizePath(virtualPath);
+    sanitized = await sanitizePath(virtualPath);
   } catch (err) {
     if (err instanceof PathError || err.name === 'PathError') {
       return jsonResponse({ error: err.message }, err.statusCode);

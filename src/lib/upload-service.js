@@ -20,7 +20,7 @@ const UPLOAD_DIR = process.env.UPLOAD_TMP_DIR || '/tmp/geniova-uploads';
 export async function initUpload(context, virtualPath, fileName, totalSize, totalChunks) {
   let sanitized;
   try {
-    sanitized = sanitizeNewPath(virtualPath);
+    sanitized = await sanitizeNewPath(virtualPath);
   } catch (err) {
     if (err instanceof PathError || err.name === 'PathError') {
       return { success: false, status: err.statusCode, error: err.message };

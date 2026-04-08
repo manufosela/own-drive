@@ -61,7 +61,7 @@ export async function POST(context) {
     });
   }
 
-  const mounts = getMountPoints();
+  const mounts = await getMountPoints();
 
   // Launch in background — do not await
   indexer.indexAll().catch((err) => {

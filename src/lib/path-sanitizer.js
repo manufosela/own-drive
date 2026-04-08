@@ -1,66 +1,100 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import { query } from './db.js';
 
 /**
- * Mount points virtuales → reales.
- * Las rutas de la API usan paths virtuales que se mapean a los mount points reales del filesystem.
+ * Dynamic mount map loaded from the volumes table.
+ * Each active volume's mount_path acts as both virtual and real path.
  * @type {Record<string, string>}
  */
-const MOUNT_MAP = {
-  '/media/raid5': process.env.STORAGE_MOUNT || '/media/raid5',
-};
+let MOUNT_MAP = {};
 
 /** @type {string[]} */
-const ALLOWED_PREFIXES = Object.values(MOUNT_MAP);
+let ALLOWED_PREFIXES = [];
+
+/** @type {number} */
+let _lastLoad = 0;
+
+/** Cache TTL: reload volumes every 30 seconds */
+const CACHE_TTL = 30_000;
+
+/**
+ * Load active volumes from DB and build the mount map.
+ * Cached with TTL to avoid querying on every request.
+ */
+export async function loadMountMap() {
+  const now = Date.now();
+  if (now - _lastLoad < CACHE_TTL && Object.keys(MOUNT_MAP).length > 0) return;
+
+  try {
+    const result = await query(
+      'SELECT mount_path FROM volumes WHERE active = true ORDER BY mount_path'
+    );
+    const map = {};
+    for (const row of result.rows) {
+      map[row.mount_path] = row.mount_path;
+    }
+    MOUNT_MAP = map;
+    ALLOWED_PREFIXES = Object.values(map);
+    _lastLoad = now;
+  } catch {
+    // If DB is unavailable, keep existing map
+  }
+}
+
+/**
+ * Force reload of mount map (e.g. after adding a volume).
+ */
+export function invalidateMountMap() {
+  _lastLoad = 0;
+}
 
 /**
  * @typedef {Object} SanitizedPath
- * @property {string} virtualPath - Path virtual normalizado (/datosnas/carpeta/file.stl)
- * @property {string} realPath - Path real en el filesystem (/mnt/datosnas/carpeta/file.stl)
- * @property {string} mountPoint - Mount point virtual (/datosnas)
- * @property {string} realMountPoint - Mount point real (/mnt/datosnas)
+ * @property {string} virtualPath - Normalized virtual path
+ * @property {string} realPath - Resolved real path on the filesystem
+ * @property {string} mountPoint - Virtual mount point
+ * @property {string} realMountPoint - Real mount point
  */
 
 /**
- * Sanitiza y valida una ruta virtual, devolviendo el path real en el filesystem.
- * Previene path traversal, null bytes y symlinks que escapen del mount point.
+ * Sanitize and validate a virtual path, returning the real filesystem path.
+ * Prevents path traversal, null bytes, and symlink escapes.
  *
- * @param {string} virtualPath - Ruta virtual desde la API (ej: /datosnas/carpeta/file.stl)
- * @returns {SanitizedPath}
- * @throws {Error} Si la ruta es inválida o intenta escapar del mount point
+ * @param {string} virtualPath - Virtual path from the API
+ * @returns {Promise<SanitizedPath>}
+ * @throws {PathError}
  */
-export function sanitizePath(virtualPath) {
+export async function sanitizePath(virtualPath) {
   if (!virtualPath || typeof virtualPath !== 'string') {
     throw new PathError('Path is required', 400);
   }
 
-  // Rechazar null bytes
   if (virtualPath.includes('\0')) {
     throw new PathError('Invalid path: null bytes not allowed', 400);
   }
 
-  // Normalizar: quitar dobles barras, resolver . y .., quitar trailing slash
+  await loadMountMap();
+
   const normalized = path.posix.normalize(virtualPath).replace(/\/+$/, '') || '/';
 
-  // Encontrar el mount point virtual
   const mountEntry = Object.entries(MOUNT_MAP).find(([prefix]) =>
     normalized === prefix || normalized.startsWith(prefix + '/')
   );
 
   if (!mountEntry) {
+    const available = Object.keys(MOUNT_MAP);
     throw new PathError(
-      `Invalid path: must start with ${Object.keys(MOUNT_MAP).join(' or ')}`,
+      available.length > 0
+        ? `Invalid path: must start with ${available.join(' or ')}`
+        : 'No volumes configured',
       400
     );
   }
 
   const [virtualMount, realMount] = mountEntry;
-
-  // Construir el path real
   const relativePath = normalized.slice(virtualMount.length) || '/';
   const realPath = path.join(realMount, relativePath);
-
-  // Verificar que el path resuelto está dentro del mount point (anti-traversal)
   const resolvedReal = path.resolve(realPath);
   const resolvedMount = path.resolve(realMount);
 
@@ -68,7 +102,6 @@ export function sanitizePath(virtualPath) {
     throw new PathError('Invalid path: directory traversal detected', 400);
   }
 
-  // Si el fichero/directorio existe, verificar con realpath (anti-symlink escape)
   if (fs.existsSync(resolvedReal)) {
     const realResolved = fs.realpathSync(resolvedReal);
     const isInsideAnyMount = ALLOWED_PREFIXES.some((prefix) =>
@@ -88,14 +121,13 @@ export function sanitizePath(virtualPath) {
 }
 
 /**
- * Verifica que un path virtual es válido sin resolver symlinks.
- * Útil para operaciones donde el destino aún no existe (mkdir, upload).
+ * Sanitize a path for new file/directory creation (no symlink check).
  *
  * @param {string} virtualPath
- * @returns {SanitizedPath}
- * @throws {Error}
+ * @returns {Promise<SanitizedPath>}
+ * @throws {PathError}
  */
-export function sanitizeNewPath(virtualPath) {
+export async function sanitizeNewPath(virtualPath) {
   if (!virtualPath || typeof virtualPath !== 'string') {
     throw new PathError('Path is required', 400);
   }
@@ -104,6 +136,8 @@ export function sanitizeNewPath(virtualPath) {
     throw new PathError('Invalid path: null bytes not allowed', 400);
   }
 
+  await loadMountMap();
+
   const normalized = path.posix.normalize(virtualPath);
 
   const mountEntry = Object.entries(MOUNT_MAP).find(([prefix]) =>
@@ -111,8 +145,11 @@ export function sanitizeNewPath(virtualPath) {
   );
 
   if (!mountEntry) {
+    const available = Object.keys(MOUNT_MAP);
     throw new PathError(
-      `Invalid path: must start with ${Object.keys(MOUNT_MAP).join(' or ')}`,
+      available.length > 0
+        ? `Invalid path: must start with ${available.join(' or ')}`
+        : 'No volumes configured',
       400
     );
   }
@@ -136,10 +173,11 @@ export function sanitizeNewPath(virtualPath) {
 }
 
 /**
- * Devuelve los mount points disponibles.
- * @returns {{ virtualPath: string, realPath: string }[]}
+ * Return configured mount points (from volumes table).
+ * @returns {Promise<{ virtualPath: string, realPath: string }[]>}
  */
-export function getMountPoints() {
+export async function getMountPoints() {
+  await loadMountMap();
   return Object.entries(MOUNT_MAP).map(([virtualPath, realPath]) => ({
     virtualPath,
     realPath,
