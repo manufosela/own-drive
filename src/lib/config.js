@@ -11,15 +11,14 @@ export const config = {
     user: env('POSTGRES_USER', 'geniova'),
     password: env('POSTGRES_PASSWORD'),
   },
-  nas: {
+  storage: {
     mountPoints: [
-      env('NAS_DATOSNAS', '/mnt/datosnas'),
-      env('NAS_NOCOMUN', '/mnt/nocomun'),
+      env('STORAGE_MOUNT', '/media/raid5'),
     ],
   },
   auth: {
-    url: env('AUTH_SIGN_URL', 'https://auth.geniova.com'),
-    appId: env('AUTH_APP_ID', 'geniova-drive'),
+    googleClientId: env('GOOGLE_CLIENT_ID'),
+    googleClientSecret: env('GOOGLE_CLIENT_SECRET'),
   },
   app: {
     port: parseInt(env('APP_PORT', '3000')),

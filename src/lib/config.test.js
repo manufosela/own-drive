@@ -15,15 +15,16 @@ describe('config', () => {
     expect(config.postgres.user).toBeDefined();
   });
 
-  it('should have nas section with mount points array', () => {
-    expect(config.nas).toBeDefined();
-    expect(config.nas.mountPoints).toBeInstanceOf(Array);
-    expect(config.nas.mountPoints.length).toBe(2);
+  it('should have storage section with mount points array', () => {
+    expect(config.storage).toBeDefined();
+    expect(config.storage.mountPoints).toBeInstanceOf(Array);
+    expect(config.storage.mountPoints.length).toBe(1);
   });
 
-  it('should have auth section', () => {
+  it('should have auth section with Google OAuth fields', () => {
     expect(config.auth).toBeDefined();
-    expect(config.auth.url).toBeDefined();
+    expect(config.auth).toHaveProperty('googleClientId');
+    expect(config.auth).toHaveProperty('googleClientSecret');
   });
 
   it('should have app section', () => {

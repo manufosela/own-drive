@@ -1,4 +1,4 @@
-import { GeniovaAuthServer } from '@geniova/auth/server';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { config } from './config.js';
 import { query } from './db.js';
 
@@ -10,67 +10,60 @@ const DEFAULT_QUOTA_BYTES = 10_737_418_240;
 
 const USER_COLUMNS = 'id, email, display_name, is_admin, is_active, external_id';
 
-/** @type {GeniovaAuthServer | null} */
-let authServer = null;
+/** Google JWKS endpoint for verifying ID tokens */
+const GOOGLE_JWKS = createRemoteJWKSet(
+  new URL('https://www.googleapis.com/oauth2/v3/certs')
+);
 
 /**
- * Get or create the GeniovaAuthServer instance.
- * @returns {GeniovaAuthServer}
- */
-function getAuthServer() {
-  if (!authServer) {
-    const jwksUrl = new URL('/.well-known/jwks.json', config.auth.url).toString();
-    authServer = GeniovaAuthServer.init({
-      appId: config.auth.appId,
-      jwksUrl,
-    });
-  }
-  return authServer;
-}
-
-/**
- * Verify a JWT token signed with RS256 by Auth&Sign.
+ * Verify a Google ID token (JWT signed with RS256).
  *
- * @param {string} token - raw JWT string
+ * @param {string} token - raw JWT string (Google ID token)
  * @returns {Promise<object | null>} decoded payload or null if invalid
  */
 export async function verifyToken(token) {
-  const server = getAuthServer();
-  return server.verifyToken(token);
+  if (!token || typeof token !== 'string') return null;
+
+  try {
+    const { payload } = await jwtVerify(token, GOOGLE_JWKS, {
+      issuer: ['https://accounts.google.com', 'accounts.google.com'],
+      audience: config.auth.googleClientId,
+    });
+    return payload;
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Resolve or provision a user from JWT payload (JIT provisioning).
+ * Resolve or provision a user from Google ID token payload (JIT provisioning).
  *
- * 1. Find by external_id (Firebase UID) → sync display_name + is_admin
- * 2. Find by email (seed users) → link external_id + sync display_name + is_admin
- * 3. Not found → create user with is_admin from roles + default quota
+ * 1. Find by external_id (Google sub) → sync display_name
+ * 2. Find by email (seed users) → link external_id + sync display_name
+ * 3. Not found → create user with default quota
  *
- * @param {object} payload - decoded JWT payload from Auth&Sign session
+ * @param {object} payload - decoded Google ID token payload
  * @returns {Promise<object | null>}
  */
 export async function resolveUser(payload) {
-  if (!payload.uid || !payload.email) return null;
+  if (!payload.sub || !payload.email) return null;
 
-  const roles = payload.roles ?? [];
-  const displayName = payload.displayName || payload.email.split('@')[0];
-  const isAdmin = roles.includes('admin');
+  const displayName = payload.name || payload.email.split('@')[0];
 
-  // 1. Find by external_id (Firebase UID)
+  // 1. Find by external_id (Google sub)
   let result = await query(
     `SELECT ${USER_COLUMNS} FROM users WHERE external_id = $1 LIMIT 1`,
-    [payload.uid]
+    [payload.sub]
   );
 
   if (result.rows.length) {
     const user = result.rows[0];
-    if (displayName !== user.display_name || isAdmin !== user.is_admin) {
+    if (displayName !== user.display_name) {
       await query(
-        'UPDATE users SET display_name = $1, is_admin = $2, updated_at = NOW() WHERE id = $3',
-        [displayName, isAdmin, user.id]
+        'UPDATE users SET display_name = $1, updated_at = NOW() WHERE id = $2',
+        [displayName, user.id]
       );
       user.display_name = displayName;
-      user.is_admin = isAdmin;
     }
     return user.is_active ? user : null;
   }
@@ -83,38 +76,35 @@ export async function resolveUser(payload) {
 
   if (result.rows.length) {
     const user = result.rows[0];
-    const wasPreRegistered = user.external_id == null;
+    const wasPreRegistered = user.external_id == null || user.external_id === 'auth_admin';
     await query(
-      'UPDATE users SET external_id = $1, display_name = $2, is_admin = $3, updated_at = NOW() WHERE id = $4',
-      [payload.uid, displayName, isAdmin, user.id]
+      'UPDATE users SET external_id = $1, display_name = $2, updated_at = NOW() WHERE id = $3',
+      [payload.sub, displayName, user.id]
     );
-    user.external_id = payload.uid;
+    user.external_id = payload.sub;
     user.display_name = displayName;
-    user.is_admin = isAdmin;
 
-    // Audit log when linking a pre-registered user (groups are preserved)
     if (wasPreRegistered) {
       query(
         `INSERT INTO audit_log (user_id, action, path, details) VALUES ($1, $2, $3, $4)`,
-        [user.id, 'pre-register-linked', '/', JSON.stringify({ linked_uid: payload.uid })]
+        [user.id, 'google-linked', '/', JSON.stringify({ linked_sub: payload.sub })]
       ).catch(() => {});
     }
 
     return user.is_active ? user : null;
   }
 
-  // 3. JIT provision: create new user
+  // 3. JIT provision: create new user (not admin by default)
   try {
     result = await query(
       `INSERT INTO users (external_id, email, display_name, is_admin) VALUES ($1, $2, $3, $4)
        RETURNING ${USER_COLUMNS}`,
-      [payload.uid, payload.email, displayName, isAdmin]
+      [payload.sub, payload.email, displayName, false]
     );
   } catch {
-    // Race condition: user created between SELECT and INSERT
     result = await query(
       `SELECT ${USER_COLUMNS} FROM users WHERE external_id = $1 LIMIT 1`,
-      [payload.uid]
+      [payload.sub]
     );
   }
 
@@ -122,7 +112,6 @@ export async function resolveUser(payload) {
 
   const user = result.rows[0];
 
-  // Ensure default quota exists
   await query(
     'INSERT INTO quotas (user_id, max_bytes) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING',
     [user.id, DEFAULT_QUOTA_BYTES]
@@ -132,20 +121,17 @@ export async function resolveUser(payload) {
 }
 
 /**
- * Extract JWT token from request.
- * Checks Authorization header first, then auth_token cookie.
+ * Extract token from request (cookie or Authorization header).
  *
  * @param {object} context - Astro API context
  * @returns {string | null}
  */
 function extractToken(context) {
-  // Authorization: Bearer <token>
   const authHeader = context.request.headers.get('authorization');
   if (authHeader?.startsWith('Bearer ')) {
     return authHeader.slice(7);
   }
 
-  // Cookie: auth_token=<token>
   const cookie = context.cookies.get('auth_token');
   if (cookie?.value) {
     return cookie.value;
@@ -155,10 +141,26 @@ function extractToken(context) {
 }
 
 /**
+ * Build Google OAuth2 authorization URL.
+ *
+ * @param {string} redirectUri - callback URL
+ * @param {string} state - original path to redirect after login
+ * @returns {string}
+ */
+function buildGoogleAuthUrl(redirectUri, state) {
+  const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  url.searchParams.set('client_id', config.auth.googleClientId);
+  url.searchParams.set('redirect_uri', redirectUri);
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('scope', 'openid email profile');
+  url.searchParams.set('state', state);
+  url.searchParams.set('access_type', 'offline');
+  url.searchParams.set('prompt', 'select_account');
+  return url.toString();
+}
+
+/**
  * Astro middleware handler for authentication.
- * - Public routes are allowed through
- * - API routes return 401 JSON response if not authenticated
- * - Page routes redirect to Auth&Sign login
  *
  * @param {object} context - Astro middleware context
  * @param {Function} next - next middleware/handler
@@ -167,12 +169,11 @@ function extractToken(context) {
 export async function authMiddleware(context, next) {
   const { pathname } = context.url;
 
-  // Skip auth for public routes
   if (PUBLIC_ROUTES.some((route) => pathname === route || pathname.startsWith(route + '/'))) {
     return next();
   }
 
-  // Dev bypass: inject first admin user without token
+  // Dev bypass
   if (process.env.DEV_BYPASS_AUTH === 'true') {
     const devUser = await query(
       `SELECT ${USER_COLUMNS} FROM users WHERE is_admin = true LIMIT 1`,
@@ -186,23 +187,10 @@ export async function authMiddleware(context, next) {
   const isApiRoute = pathname.startsWith('/api/');
   const token = extractToken(context);
 
-  /**
-   * Build the Auth&Sign authorize redirect URL.
-   * Derives the origin from the request Host header so the callback URL
-   * matches the hostname/IP the user is actually accessing from.
-   * @param {string} pathname - the path the user was trying to access
-   */
-  function buildAuthRedirect(pathname) {
+  function getCallbackUrl() {
     const host = context.request.headers.get('host') || context.url.host;
     const proto = context.request.headers.get('x-forwarded-proto') || context.url.protocol.replace(':', '');
-    const origin = `${proto}://${host}`;
-    const callbackUrl = new URL('/auth/callback', origin).toString();
-    const stateUrl = new URL(pathname, origin).toString();
-    const authorizeUrl = new URL('/authorize', config.auth.url);
-    authorizeUrl.searchParams.set('redirect_uri', callbackUrl);
-    authorizeUrl.searchParams.set('client_id', config.auth.appId);
-    authorizeUrl.searchParams.set('state', stateUrl);
-    return authorizeUrl.toString();
+    return `${proto}://${host}/auth/callback`;
   }
 
   if (!token) {
@@ -212,7 +200,7 @@ export async function authMiddleware(context, next) {
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    return context.redirect(buildAuthRedirect(pathname));
+    return context.redirect(buildGoogleAuthUrl(getCallbackUrl(), pathname));
   }
 
   const payload = await verifyToken(token);
@@ -223,7 +211,7 @@ export async function authMiddleware(context, next) {
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    return context.redirect(buildAuthRedirect(pathname));
+    return context.redirect(buildGoogleAuthUrl(getCallbackUrl(), pathname));
   }
 
   const user = await resolveUser(payload);
@@ -234,7 +222,7 @@ export async function authMiddleware(context, next) {
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    return context.redirect(buildAuthRedirect(pathname));
+    return context.redirect(buildGoogleAuthUrl(getCallbackUrl(), pathname));
   }
 
   context.locals.user = user;

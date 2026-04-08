@@ -1,28 +1,24 @@
-import { config } from '../../../lib/config.js';
 import { logAudit, getClientIp } from '../../../lib/audit-logger.js';
 
 /**
  * POST /api/auth/revoke-all-sessions
  *
- * Revokes all sessions for the current user by calling the Auth&Sign
- * HTTP revocation endpoint, then clears the local auth cookie.
+ * Revokes the Google token and clears the local auth cookie.
  */
 export async function POST(context) {
   const token = context.cookies.get('auth_token')?.value;
 
   if (token) {
-    const revokeUrl = new URL('/api/revoke-session', config.auth.url);
     try {
-      await fetch(revokeUrl.toString(), {
+      await fetch(`https://oauth2.googleapis.com/revoke?token=${token}`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
     } catch {
-      // best-effort: Auth&Sign may be unreachable
+      // best-effort: Google may be unreachable
     }
   }
 
-  // Audit: log logout_all (this route is protected, so locals.user is set)
   logAudit({ userId: context.locals.user?.id, action: 'logout_all', path: '/', ipAddress: getClientIp(context) });
 
   context.cookies.delete('auth_token', { path: '/' });

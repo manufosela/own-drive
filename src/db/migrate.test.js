@@ -74,11 +74,10 @@ describe('migrate', () => {
       );
       expect(content).toContain('INSERT INTO groups');
       expect(content).toContain('admins');
-      expect(content).toContain('produccion');
-      expect(content).toContain('diseno');
-      expect(content).toContain('mfosela@geniova.com');
-      expect(content).toContain('/datosnas');
-      expect(content).toContain('/no-comun');
+      expect(content).toContain('family');
+      expect(content).toContain('guests');
+      expect(content).toContain('mjfosela@gmail.com');
+      expect(content).toContain('/media/raid5');
       expect(content).toContain('INSERT INTO quotas');
     });
 

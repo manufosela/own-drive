@@ -4,10 +4,8 @@ import { logAudit, getClientIp } from '../../../lib/audit-logger.js';
 /**
  * POST /api/auth/logout
  * Clears the httpOnly auth_token cookie and returns a JSON response.
- * Called by the client-side auth SDK when it detects a Firebase logout.
  */
 export async function POST(context) {
-  // Audit: log logout before clearing the cookie (best-effort)
   const token = context.cookies.get('auth_token')?.value;
   if (token) {
     try {

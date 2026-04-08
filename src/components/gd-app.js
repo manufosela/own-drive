@@ -14,7 +14,6 @@ export class GdApp extends LitElement {
   static properties = {
     version: { type: String },
     isAdmin: { type: Boolean, attribute: 'is-admin' },
-    authUrl: { type: String, attribute: 'auth-url' },
     userName: { type: String, attribute: 'user-name' },
     userEmail: { type: String, attribute: 'user-email' },
     _currentPath: { state: true },
@@ -35,7 +34,6 @@ export class GdApp extends LitElement {
     super();
     this.version = '0.1.0';
     this.isAdmin = false;
-    this.authUrl = '';
     this.userName = '';
     this.userEmail = '';
     this._currentPath = '';
@@ -634,7 +632,7 @@ export class GdApp extends LitElement {
                   : this._adminTab === 'groups'
                     ? html`<gd-admin-groups></gd-admin-groups>`
                     : this._adminTab === 'users'
-                      ? html`<gd-admin-users auth-url=${this.authUrl || ''}></gd-admin-users>`
+                      ? html`<gd-admin-users></gd-admin-users>`
                       : this._adminTab === 'recycle'
                         ? html`<gd-admin-recycle></gd-admin-recycle>`
                         : html`<gd-admin-audit></gd-admin-audit>`}
@@ -868,9 +866,7 @@ export class GdApp extends LitElement {
     try {
       await fetch('/api/auth/revoke-all-sessions', { method: 'POST' });
     } catch { /* best-effort */ }
-    const logoutUrl = new URL('/logout', this.authUrl || 'https://auth.geniova.com');
-    logoutUrl.searchParams.set('redirect_uri', window.location.origin);
-    window.location.href = logoutUrl.toString();
+    window.location.href = '/';
   }
 
   async _logout() {
@@ -878,9 +874,7 @@ export class GdApp extends LitElement {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
     } catch { /* best-effort */ }
-    const logoutUrl = new URL('/logout', this.authUrl || 'https://auth.geniova.com');
-    logoutUrl.searchParams.set('redirect_uri', window.location.origin);
-    window.location.href = logoutUrl.toString();
+    window.location.href = '/';
   }
 
   _onUploadComplete() {

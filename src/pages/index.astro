@@ -1,16 +1,14 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { config } from '../lib/config.js';
 
 const user = Astro.locals.user;
 const isAdmin = user?.is_admin ?? false;
-const authUrl = config.auth.url;
 const userName = user?.display_name ?? '';
 const userEmail = user?.email ?? '';
 ---
 
-<Layout title="Geniova Drive">
-  <gd-app data-admin={isAdmin} data-auth-url={authUrl} data-user-name={userName} data-user-email={userEmail}></gd-app>
+<Layout title="Own Drive">
+  <gd-app data-admin={isAdmin} data-user-name={userName} data-user-email={userEmail}></gd-app>
 </Layout>
 
 <script>
@@ -20,9 +18,6 @@ const userEmail = user?.email ?? '';
   if (el) {
     if (el.dataset.admin === 'true') {
       el.isAdmin = true;
-    }
-    if (el.dataset.authUrl) {
-      el.authUrl = el.dataset.authUrl;
     }
     if (el.dataset.userName) {
       el.userName = el.dataset.userName;

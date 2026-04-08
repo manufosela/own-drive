@@ -3,11 +3,10 @@ import { ApiClient } from '../lib/api-client.js';
 
 /**
  * Admin panel for viewing users and pre-registering new ones.
- * Full user management (disable, roles) is done in Auth&Sign.
+ * Full user management (disable, roles, pre-registration).
  */
 export class GdAdminUsers extends LitElement {
   static properties = {
-    authUrl: { type: String, attribute: 'auth-url' },
     _users: { state: true },
     _groups: { state: true },
     _loading: { state: true },
@@ -20,7 +19,6 @@ export class GdAdminUsers extends LitElement {
 
   constructor() {
     super();
-    this.authUrl = '';
     /** @type {Array<{id: number, email: string, display_name: string, is_admin: boolean, is_active: boolean, status: string, groups: Array<{id: number, name: string}>}>} */
     this._users = [];
     /** @type {Array<{id: number, name: string}>} */
@@ -205,11 +203,7 @@ export class GdAdminUsers extends LitElement {
       ${this._error ? html`<div class="error-banner" aria-live="polite">${this._error}</div>` : nothing}
       ${this._message ? html`<div class="success-banner" aria-live="polite">${this._message}</div>` : nothing}
       <div class="info-banner">
-        Los usuarios se sincronizan desde Auth&Sign.
-        Para gestionar roles y deshabilitarlos,
-        ${this.authUrl
-          ? html` accede a <a href="${this.authUrl}/admin" target="_blank" rel="noopener">Auth&Sign</a>.`
-          : html` usa el portal de Auth&Sign.`}
+        Los usuarios se autentican con Google. Los nuevos usuarios se crean automáticamente en su primer login.
       </div>
       ${this._mode === 'create' ? this._renderForm() : this._renderList()}
     `;

@@ -18,7 +18,6 @@
   "dependencies": {
     "@astrojs/lit": "^4.3.0",
     "@astrojs/node": "^9.5.3",
-    "@geniova/auth": "file:vendor/geniova-auth",
     "archiver": "^7.0.1",
     "astro": "^5.17.2",
     "dicom-parser": "^1.8.21",

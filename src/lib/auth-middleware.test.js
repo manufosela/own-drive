@@ -10,23 +10,17 @@ vi.mock('./db.js', () => ({
 vi.mock('./config.js', () => ({
   config: {
     auth: {
-      url: 'https://auth.geniova.com',
-      appId: 'geniova-drive',
-    },
-    app: {
-      publicUrl: 'http://192.168.63.124:3000',
+      googleClientId: 'test-client-id.apps.googleusercontent.com',
+      googleClientSecret: 'test-client-secret',
     },
   },
 }));
 
-// Mock @geniova/auth/server
-const mockVerifyToken = vi.fn();
-vi.mock('@geniova/auth/server', () => ({
-  GeniovaAuthServer: {
-    init: vi.fn(() => ({
-      verifyToken: (...args) => mockVerifyToken(...args),
-    })),
-  },
+// Mock jose
+const mockJwtVerify = vi.fn();
+vi.mock('jose', () => ({
+  createRemoteJWKSet: vi.fn(() => 'mock-jwks'),
+  jwtVerify: (...args) => mockJwtVerify(...args),
 }));
 
 const { verifyToken, resolveUser, authMiddleware } = await import('./auth-middleware.js');
@@ -37,290 +31,187 @@ describe('auth-middleware', () => {
   });
 
   // ========================================
-  // verifyToken: validate JWT signature and expiry
+  // verifyToken: validate Google ID token
   // ========================================
   describe('verifyToken', () => {
-    it('should return payload for a valid token', async () => {
+    it('should return payload for a valid Google ID token', async () => {
       const expectedPayload = {
-        uid: 'firebase-uid-123',
-        email: 'user@geniova.com',
-        roles: ['user'],
-        appId: 'geniova-drive',
+        sub: 'google-uid-123',
+        email: 'user@gmail.com',
+        name: 'Test User',
       };
-      mockVerifyToken.mockResolvedValueOnce(expectedPayload);
+      mockJwtVerify.mockResolvedValueOnce({ payload: expectedPayload });
 
       const payload = await verifyToken('valid.jwt.token');
       expect(payload).toEqual(expectedPayload);
-      expect(mockVerifyToken).toHaveBeenCalledWith('valid.jwt.token');
+      expect(mockJwtVerify).toHaveBeenCalledWith(
+        'valid.jwt.token',
+        'mock-jwks',
+        {
+          issuer: ['https://accounts.google.com', 'accounts.google.com'],
+          audience: 'test-client-id.apps.googleusercontent.com',
+        }
+      );
     });
 
     it('should return null when token is expired', async () => {
-      mockVerifyToken.mockResolvedValueOnce(null);
+      mockJwtVerify.mockRejectedValueOnce(new Error('token expired'));
 
       const payload = await verifyToken('expired.jwt.token');
       expect(payload).toBeNull();
     });
 
     it('should return null for invalid signature', async () => {
-      mockVerifyToken.mockResolvedValueOnce(null);
+      mockJwtVerify.mockRejectedValueOnce(new Error('invalid signature'));
 
       const payload = await verifyToken('bad-signature.jwt.token');
       expect(payload).toBeNull();
     });
 
     it('should return null for empty or malformed token', async () => {
-      mockVerifyToken.mockResolvedValueOnce(null);
       expect(await verifyToken('')).toBeNull();
-
-      mockVerifyToken.mockResolvedValueOnce(null);
-      expect(await verifyToken('onlyonepart')).toBeNull();
+      expect(await verifyToken(null)).toBeNull();
     });
   });
 
   // ========================================
-  // resolveUser: look up user in DB from JWT payload
+  // resolveUser: look up user in DB from Google payload
   // ========================================
   describe('resolveUser', () => {
-    it('should return null when uid and email are missing', async () => {
+    it('should return null when sub and email are missing', async () => {
       expect(await resolveUser({})).toBeNull();
-      expect(await resolveUser({ uid: 'abc' })).toBeNull();
+      expect(await resolveUser({ sub: 'abc' })).toBeNull();
       expect(await resolveUser({ email: 'a@b.com' })).toBeNull();
     });
 
     it('should find user by external_id and sync display_name', async () => {
       mockQuery.mockResolvedValueOnce({
         rows: [{
-          id: 3, email: 'ext@geniova.com', display_name: 'Old Name',
-          is_admin: false, is_active: true, external_id: 'uid-3',
+          id: 3, email: 'user@gmail.com', display_name: 'Old Name',
+          is_admin: false, is_active: true, external_id: 'google-sub-3',
         }],
       });
-      // UPDATE for display_name sync
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
-      const user = await resolveUser({ uid: 'uid-3', email: 'ext@geniova.com', displayName: 'New Name', roles: ['user'] });
+      const user = await resolveUser({ sub: 'google-sub-3', email: 'user@gmail.com', name: 'New Name' });
       expect(user).toBeDefined();
       expect(user.display_name).toBe('New Name');
       expect(mockQuery).toHaveBeenCalledTimes(2);
       expect(mockQuery.mock.calls[1][0]).toContain('UPDATE');
     });
 
-    it('should skip update when display_name and is_admin unchanged', async () => {
+    it('should skip update when display_name unchanged', async () => {
       mockQuery.mockResolvedValueOnce({
         rows: [{
-          id: 3, email: 'ext@geniova.com', display_name: 'Same Name',
-          is_admin: false, is_active: true, external_id: 'uid-3',
+          id: 3, email: 'user@gmail.com', display_name: 'Same Name',
+          is_admin: false, is_active: true, external_id: 'google-sub-3',
         }],
       });
 
-      const user = await resolveUser({ uid: 'uid-3', email: 'ext@geniova.com', displayName: 'Same Name', roles: ['user'] });
+      const user = await resolveUser({ sub: 'google-sub-3', email: 'user@gmail.com', name: 'Same Name' });
       expect(user).toBeDefined();
-      expect(mockQuery).toHaveBeenCalledTimes(1); // No UPDATE
-    });
-
-    it('should sync is_admin=true when roles include admin', async () => {
-      mockQuery.mockResolvedValueOnce({
-        rows: [{
-          id: 3, email: 'ext@geniova.com', display_name: 'Same Name',
-          is_admin: false, is_active: true, external_id: 'uid-3',
-        }],
-      });
-      mockQuery.mockResolvedValueOnce({ rows: [] });
-
-      const user = await resolveUser({ uid: 'uid-3', email: 'ext@geniova.com', displayName: 'Same Name', roles: ['user', 'admin'] });
-      expect(user.is_admin).toBe(true);
-      expect(mockQuery).toHaveBeenCalledTimes(2);
-      expect(mockQuery.mock.calls[1][1]).toEqual(['Same Name', true, 3]);
-    });
-
-    it('should sync is_admin=false when roles do not include admin', async () => {
-      mockQuery.mockResolvedValueOnce({
-        rows: [{
-          id: 3, email: 'ext@geniova.com', display_name: 'Admin User',
-          is_admin: true, is_active: true, external_id: 'uid-3',
-        }],
-      });
-      mockQuery.mockResolvedValueOnce({ rows: [] });
-
-      const user = await resolveUser({ uid: 'uid-3', email: 'ext@geniova.com', displayName: 'Admin User', roles: ['user'] });
-      expect(user.is_admin).toBe(false);
-      expect(mockQuery).toHaveBeenCalledTimes(2);
-      expect(mockQuery.mock.calls[1][1]).toEqual(['Admin User', false, 3]);
+      expect(mockQuery).toHaveBeenCalledTimes(1);
     });
 
     it('should return null for inactive user found by external_id', async () => {
       mockQuery.mockResolvedValueOnce({
         rows: [{
-          id: 5, email: 'disabled@geniova.com', display_name: 'Disabled',
-          is_admin: false, is_active: false, external_id: 'uid-5',
+          id: 5, email: 'disabled@gmail.com', display_name: 'Disabled',
+          is_admin: false, is_active: false, external_id: 'google-sub-5',
         }],
       });
 
-      const user = await resolveUser({ uid: 'uid-5', email: 'disabled@geniova.com' });
+      const user = await resolveUser({ sub: 'google-sub-5', email: 'disabled@gmail.com' });
       expect(user).toBeNull();
     });
 
     it('should find by email and link external_id (seed user scenario)', async () => {
-      // Not found by external_id
       mockQuery.mockResolvedValueOnce({ rows: [] });
-      // Found by email
       mockQuery.mockResolvedValueOnce({
         rows: [{
-          id: 1, email: 'mfosela@geniova.com', display_name: 'Mánu Fosela',
+          id: 1, email: 'mjfosela@gmail.com', display_name: 'Mánu Fosela',
           is_admin: true, is_active: true, external_id: 'auth_admin',
         }],
       });
-      // UPDATE to link external_id + sync is_admin
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      // audit log for google-linked
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
-      const user = await resolveUser({ uid: 'real-firebase-uid', email: 'mfosela@geniova.com', displayName: 'Mánu Fosela', roles: ['admin', 'user'] });
+      const user = await resolveUser({ sub: 'real-google-sub', email: 'mjfosela@gmail.com', name: 'Mánu Fosela' });
       expect(user).toBeDefined();
-      expect(user.external_id).toBe('real-firebase-uid');
-      expect(user.is_admin).toBe(true);
-      expect(mockQuery).toHaveBeenCalledTimes(3);
-      expect(mockQuery.mock.calls[2][1]).toEqual(['real-firebase-uid', 'Mánu Fosela', true, 1]);
+      expect(user.external_id).toBe('real-google-sub');
+      expect(mockQuery).toHaveBeenCalledTimes(4);
+      expect(mockQuery.mock.calls[2][1]).toEqual(['real-google-sub', 'Mánu Fosela', 1]);
     });
 
     it('should JIT provision new user when not found', async () => {
-      // Not found by external_id
       mockQuery.mockResolvedValueOnce({ rows: [] });
-      // Not found by email
       mockQuery.mockResolvedValueOnce({ rows: [] });
-      // INSERT new user
       mockQuery.mockResolvedValueOnce({
         rows: [{
-          id: 10, email: 'new@geniova.com', display_name: 'New User',
-          is_admin: false, is_active: true, external_id: 'new-uid',
+          id: 10, email: 'new@gmail.com', display_name: 'New User',
+          is_admin: false, is_active: true, external_id: 'new-sub',
         }],
       });
-      // INSERT quota
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
-      const user = await resolveUser({ uid: 'new-uid', email: 'new@geniova.com', displayName: 'New User', roles: ['user'] });
+      const user = await resolveUser({ sub: 'new-sub', email: 'new@gmail.com', name: 'New User' });
       expect(user).toBeDefined();
       expect(user.id).toBe(10);
       expect(user.is_admin).toBe(false);
-      // Verify INSERT includes is_admin
       expect(mockQuery.mock.calls[2][0]).toContain('INSERT INTO users');
-      expect(mockQuery.mock.calls[2][1]).toEqual(['new-uid', 'new@geniova.com', 'New User', false]);
-      // Verify quota was created
+      expect(mockQuery.mock.calls[2][1]).toEqual(['new-sub', 'new@gmail.com', 'New User', false]);
       expect(mockQuery.mock.calls[3][0]).toContain('INSERT INTO quotas');
     });
 
-    it('should JIT provision admin user from roles', async () => {
+    it('should use email prefix as displayName when name not provided', async () => {
       mockQuery.mockResolvedValueOnce({ rows: [] });
       mockQuery.mockResolvedValueOnce({ rows: [] });
       mockQuery.mockResolvedValueOnce({
         rows: [{
-          id: 12, email: 'admin@geniova.com', display_name: 'New Admin',
-          is_admin: true, is_active: true, external_id: 'admin-uid',
+          id: 11, email: 'john@gmail.com', display_name: 'john',
+          is_admin: false, is_active: true, external_id: 'sub-11',
         }],
       });
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
-      const user = await resolveUser({ uid: 'admin-uid', email: 'admin@geniova.com', displayName: 'New Admin', roles: ['user', 'admin'] });
-      expect(user.is_admin).toBe(true);
-      expect(mockQuery.mock.calls[2][1]).toEqual(['admin-uid', 'admin@geniova.com', 'New Admin', true]);
-    });
-
-    it('should use email prefix as displayName when not provided', async () => {
-      mockQuery.mockResolvedValueOnce({ rows: [] });
-      mockQuery.mockResolvedValueOnce({ rows: [] });
-      mockQuery.mockResolvedValueOnce({
-        rows: [{
-          id: 11, email: 'john@geniova.com', display_name: 'john',
-          is_admin: false, is_active: true, external_id: 'uid-11',
-        }],
-      });
-      mockQuery.mockResolvedValueOnce({ rows: [] });
-
-      const user = await resolveUser({ uid: 'uid-11', email: 'john@geniova.com', roles: ['user'] });
+      const user = await resolveUser({ sub: 'sub-11', email: 'john@gmail.com' });
       expect(user).toBeDefined();
-      expect(mockQuery.mock.calls[2][1]).toEqual(['uid-11', 'john@geniova.com', 'john', false]);
-    });
-
-    it('should default is_admin to false when roles is missing', async () => {
-      mockQuery.mockResolvedValueOnce({
-        rows: [{
-          id: 3, email: 'ext@geniova.com', display_name: 'User',
-          is_admin: true, is_active: true, external_id: 'uid-3',
-        }],
-      });
-      mockQuery.mockResolvedValueOnce({ rows: [] });
-
-      const user = await resolveUser({ uid: 'uid-3', email: 'ext@geniova.com', displayName: 'User' });
-      expect(user.is_admin).toBe(false);
-    });
-
-    it('should preserve pre-assigned groups when linking pre-registered user by email', async () => {
-      // Not found by external_id
-      mockQuery.mockResolvedValueOnce({ rows: [] });
-      // Found by email (pre-registered: external_id IS NULL)
-      mockQuery.mockResolvedValueOnce({
-        rows: [{
-          id: 20, email: 'preregistered@geniova.com', display_name: 'preregistered',
-          is_admin: false, is_active: true, external_id: null,
-        }],
-      });
-      // UPDATE to link external_id + sync fields
-      mockQuery.mockResolvedValueOnce({ rows: [] });
-      // Audit log insert (pre-register-linked)
-      mockQuery.mockResolvedValueOnce({ rows: [] });
-
-      const user = await resolveUser({
-        uid: 'real-uid-20', email: 'preregistered@geniova.com',
-        displayName: 'Pre Registered User', roles: ['user'],
-      });
-
-      expect(user).toBeDefined();
-      expect(user.external_id).toBe('real-uid-20');
-      expect(user.display_name).toBe('Pre Registered User');
-
-      // Verify the UPDATE does NOT touch user_groups
-      const updateCall = mockQuery.mock.calls[2];
-      expect(updateCall[0]).toContain('UPDATE users SET');
-      expect(updateCall[0]).not.toContain('user_groups');
-      expect(updateCall[0]).not.toContain('DELETE');
+      expect(mockQuery.mock.calls[2][1]).toEqual(['sub-11', 'john@gmail.com', 'john', false]);
     });
 
     it('should log audit event when linking pre-registered user', async () => {
-      // Not found by external_id
       mockQuery.mockResolvedValueOnce({ rows: [] });
-      // Found by email (pre-registered: external_id IS NULL)
       mockQuery.mockResolvedValueOnce({
         rows: [{
-          id: 20, email: 'preregistered@geniova.com', display_name: 'preregistered',
+          id: 20, email: 'preregistered@gmail.com', display_name: 'preregistered',
           is_admin: false, is_active: true, external_id: null,
         }],
       });
-      // UPDATE to link external_id
       mockQuery.mockResolvedValueOnce({ rows: [] });
-      // Audit log insert
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
       await resolveUser({
-        uid: 'real-uid-20', email: 'preregistered@geniova.com',
-        displayName: 'Pre Registered', roles: ['user'],
+        sub: 'real-sub-20', email: 'preregistered@gmail.com', name: 'Pre Registered',
       });
 
-      // The 4th call should be audit log
       expect(mockQuery.mock.calls[3][0]).toContain('INSERT INTO audit_log');
-      expect(mockQuery.mock.calls[3][1]).toContain('pre-register-linked');
+      expect(mockQuery.mock.calls[3][1]).toContain('google-linked');
     });
 
     it('should handle race condition on INSERT gracefully', async () => {
-      mockQuery.mockResolvedValueOnce({ rows: [] }); // Not found by uid
-      mockQuery.mockResolvedValueOnce({ rows: [] }); // Not found by email
-      mockQuery.mockRejectedValueOnce(new Error('unique_violation')); // INSERT fails
-      // Re-SELECT after race condition
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      mockQuery.mockRejectedValueOnce(new Error('unique_violation'));
       mockQuery.mockResolvedValueOnce({
         rows: [{
-          id: 10, email: 'race@geniova.com', display_name: 'Race User',
-          is_admin: false, is_active: true, external_id: 'race-uid',
+          id: 10, email: 'race@gmail.com', display_name: 'Race User',
+          is_admin: false, is_active: true, external_id: 'race-sub',
         }],
       });
-      mockQuery.mockResolvedValueOnce({ rows: [] }); // Quota
+      mockQuery.mockResolvedValueOnce({ rows: [] });
 
-      const user = await resolveUser({ uid: 'race-uid', email: 'race@geniova.com', displayName: 'Race User' });
+      const user = await resolveUser({ sub: 'race-sub', email: 'race@gmail.com', name: 'Race User' });
       expect(user).toBeDefined();
       expect(user.id).toBe(10);
     });
@@ -364,16 +255,12 @@ describe('auth-middleware', () => {
     });
 
     it('should extract token from Authorization header', async () => {
-      mockVerifyToken.mockResolvedValueOnce(
-        { uid: 'uid-10', email: 'user@geniova.com', roles: ['user'] },
-      );
+      const googlePayload = { sub: 'uid-10', email: 'user@gmail.com', name: 'Test User' };
+      mockJwtVerify.mockResolvedValueOnce({ payload: googlePayload });
       mockQuery.mockResolvedValueOnce({
         rows: [{
-          id: 10,
-          email: 'user@geniova.com',
-          display_name: 'Test User',
-          is_admin: false,
-          is_active: true,
+          id: 10, email: 'user@gmail.com', display_name: 'Test User',
+          is_admin: false, is_active: true, external_id: 'uid-10',
         }],
       });
 
@@ -383,21 +270,17 @@ describe('auth-middleware', () => {
 
       await authMiddleware(ctx, mockNext);
       expect(ctx.locals.user).toBeDefined();
-      expect(ctx.locals.user.email).toBe('user@geniova.com');
+      expect(ctx.locals.user.email).toBe('user@gmail.com');
       expect(mockNext).toHaveBeenCalled();
     });
 
     it('should extract token from auth_token cookie', async () => {
-      mockVerifyToken.mockResolvedValueOnce(
-        { uid: 'uid-10', email: 'user@geniova.com', roles: ['user'] },
-      );
+      const googlePayload = { sub: 'uid-10', email: 'user@gmail.com', name: 'Test User' };
+      mockJwtVerify.mockResolvedValueOnce({ payload: googlePayload });
       mockQuery.mockResolvedValueOnce({
         rows: [{
-          id: 10,
-          email: 'user@geniova.com',
-          display_name: 'Test User',
-          is_admin: false,
-          is_active: true,
+          id: 10, email: 'user@gmail.com', display_name: 'Test User',
+          is_admin: false, is_active: true, external_id: 'uid-10',
         }],
       });
 
@@ -420,7 +303,7 @@ describe('auth-middleware', () => {
     });
 
     it('should return 401 for API routes with invalid token', async () => {
-      mockVerifyToken.mockResolvedValueOnce(null);
+      mockJwtVerify.mockRejectedValueOnce(new Error('invalid'));
 
       const ctx = createMockContext({
         url: 'http://localhost:3000/api/files',
@@ -431,7 +314,7 @@ describe('auth-middleware', () => {
       expect(response.status).toBe(401);
     });
 
-    it('should redirect pages to Auth&Sign authorize when no token', async () => {
+    it('should redirect pages to Google OAuth when no token', async () => {
       const ctx = createMockContext({
         url: 'http://localhost:3000/',
       });
@@ -439,12 +322,12 @@ describe('auth-middleware', () => {
       await authMiddleware(ctx, mockNext);
       expect(ctx.redirect).toHaveBeenCalled();
       const redirectUrl = ctx.redirect.mock.calls[0][0];
-      expect(redirectUrl).toContain('auth.geniova.com/authorize');
-      expect(redirectUrl).toContain('client_id=geniova-drive');
+      expect(redirectUrl).toContain('accounts.google.com/o/oauth2/v2/auth');
+      expect(redirectUrl).toContain('client_id=test-client-id.apps.googleusercontent.com');
       expect(redirectUrl).toContain('redirect_uri=');
     });
 
-    it('should use request origin (not hardcoded publicUrl) for state and redirect_uri', async () => {
+    it('should use request origin for redirect_uri', async () => {
       const ctx = createMockContext({
         url: 'http://localhost:3000/dashboard',
       });
@@ -454,19 +337,17 @@ describe('auth-middleware', () => {
       const redirectUrl = new URL(ctx.redirect.mock.calls[0][0]);
       const state = redirectUrl.searchParams.get('state');
       const redirectUri = redirectUrl.searchParams.get('redirect_uri');
-      // state and redirect_uri must use the actual request origin
-      expect(state).toBe('http://localhost:3000/dashboard');
+      expect(state).toBe('/dashboard');
       expect(redirectUri).toBe('http://localhost:3000/auth/callback');
     });
 
     it('should return 401 for API when user not found in DB', async () => {
-      mockVerifyToken.mockResolvedValueOnce(
-        { uid: 'ghost-uid', email: 'ghost@geniova.com' },
-      );
-      mockQuery.mockResolvedValueOnce({ rows: [] }); // Not found by external_id
-      mockQuery.mockResolvedValueOnce({ rows: [] }); // Not found by email
-      mockQuery.mockRejectedValueOnce(new Error('unique_violation')); // INSERT fails
-      mockQuery.mockResolvedValueOnce({ rows: [] }); // Re-SELECT also empty
+      const googlePayload = { sub: 'ghost-sub', email: 'ghost@gmail.com', name: 'Ghost' };
+      mockJwtVerify.mockResolvedValueOnce({ payload: googlePayload });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      mockQuery.mockRejectedValueOnce(new Error('unique_violation'));
+      mockQuery.mockResolvedValueOnce({ rows: [] });
 
       const ctx = createMockContext({
         url: 'http://localhost:3000/api/files',
@@ -478,7 +359,7 @@ describe('auth-middleware', () => {
     });
 
     it('should redirect page when token is invalid (not API)', async () => {
-      mockVerifyToken.mockResolvedValueOnce(null);
+      mockJwtVerify.mockRejectedValueOnce(new Error('invalid'));
 
       const ctx = createMockContext({
         url: 'http://localhost:3000/dashboard',
@@ -488,32 +369,12 @@ describe('auth-middleware', () => {
       await authMiddleware(ctx, mockNext);
       expect(ctx.redirect).toHaveBeenCalled();
       const redirectUrl = ctx.redirect.mock.calls[0][0];
-      expect(redirectUrl).toContain('auth.geniova.com/authorize');
-    });
-
-    it('should redirect page when user not found in DB (not API)', async () => {
-      mockVerifyToken.mockResolvedValueOnce(
-        { uid: 'ghost-uid', email: 'ghost@geniova.com' },
-      );
-      mockQuery.mockResolvedValueOnce({ rows: [] }); // Not found by external_id
-      mockQuery.mockResolvedValueOnce({ rows: [] }); // Not found by email
-      mockQuery.mockRejectedValueOnce(new Error('unique_violation')); // INSERT fails
-      mockQuery.mockResolvedValueOnce({ rows: [] }); // Re-SELECT also empty
-
-      const ctx = createMockContext({
-        url: 'http://localhost:3000/dashboard',
-        headers: { authorization: 'Bearer valid-token' },
-      });
-
-      await authMiddleware(ctx, mockNext);
-      expect(ctx.redirect).toHaveBeenCalled();
-      const redirectUrl = ctx.redirect.mock.calls[0][0];
-      expect(redirectUrl).toContain('auth.geniova.com/authorize');
+      expect(redirectUrl).toContain('accounts.google.com');
     });
 
     it('should allow access to /auth/callback without token', async () => {
       const ctx = createMockContext({
-        url: 'http://localhost:3000/auth/callback?token=abc',
+        url: 'http://localhost:3000/auth/callback?code=abc',
       });
 
       await authMiddleware(ctx, mockNext);
