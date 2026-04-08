@@ -2269,8 +2269,18 @@ export class GdFileExplorer extends LitElement {
   async _initEpubViewer(container) {
     const url = container.dataset.url;
     try {
-      const { default: ePub } = await import('https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js');
-      const book = ePub(url);
+      // epub.js registers as window.ePub — load via script tag
+      if (!window.ePub) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js';
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+      }
+
+      const book = window.ePub(url);
 
       // Clear loading indicator
       container.innerHTML = '';
