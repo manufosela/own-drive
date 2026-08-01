@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -76,7 +76,7 @@ describe('migrate', () => {
       expect(content).toContain('admins');
       expect(content).toContain('family');
       expect(content).toContain('guests');
-      expect(content).toContain('admin@example.com');
+      expect(content).toContain('${ADMIN_EMAIL}');
       expect(content).toContain('/media/raid5');
       expect(content).toContain('INSERT INTO quotas');
     });
@@ -103,6 +103,9 @@ describe('migrate', () => {
 
     beforeEach(() => {
       vi.clearAllMocks();
+      // Real migration files are read here, and 002 requires these placeholders.
+      process.env.ADMIN_EMAIL = 'admin@example.com';
+      process.env.ADMIN_NAME = 'Admin User';
       mockClient = {
         query: vi.fn(),
         release: vi.fn(),
@@ -111,6 +114,11 @@ describe('migrate', () => {
         query: vi.fn(),
         connect: vi.fn(() => mockClient),
       };
+    });
+
+    afterEach(() => {
+      delete process.env.ADMIN_EMAIL;
+      delete process.env.ADMIN_NAME;
     });
 
     it('ensureMigrationsTable should create schema_migrations table', async () => {
@@ -212,6 +220,48 @@ describe('migrate', () => {
       const { createPool } = await import('./migrate.js');
       const pool = createPool({ host: 'testhost', port: 1234 });
       expect(pool).toBeDefined();
+    });
+  });
+
+  describe('resolvePlaceholders', () => {
+    const env = { ADMIN_EMAIL: 'admin@example.com', ADMIN_NAME: 'Admin' };
+
+    it('replaces known placeholders from the environment', async () => {
+      const { resolvePlaceholders } = await import('./migrate.js');
+      const sql = "INSERT INTO users (email, display_name) VALUES ('${ADMIN_EMAIL}', '${ADMIN_NAME}');";
+      expect(resolvePlaceholders(sql, '002.sql', env)).toBe(
+        "INSERT INTO users (email, display_name) VALUES ('admin@example.com', 'Admin');"
+      );
+    });
+
+    it('leaves SQL without placeholders untouched', async () => {
+      const { resolvePlaceholders } = await import('./migrate.js');
+      const sql = 'CREATE TABLE users (id SERIAL PRIMARY KEY);';
+      expect(resolvePlaceholders(sql, '001.sql', env)).toBe(sql);
+    });
+
+    it('throws when a required variable is missing instead of seeding an empty admin', async () => {
+      const { resolvePlaceholders } = await import('./migrate.js');
+      expect(() => resolvePlaceholders("'${ADMIN_EMAIL}'", '002.sql', {})).toThrow(
+        /ADMIN_EMAIL\} is required but not set/
+      );
+    });
+
+    it('throws on an unknown placeholder', async () => {
+      const { resolvePlaceholders } = await import('./migrate.js');
+      expect(() => resolvePlaceholders('${SOMETHING_ELSE}', '002.sql', env)).toThrow(
+        /unknown placeholder/
+      );
+    });
+
+    // A name like O'Brien must not break out of the SQL string literal.
+    it('escapes single quotes in substituted values', async () => {
+      const { resolvePlaceholders } = await import('./migrate.js');
+      const out = resolvePlaceholders("'${ADMIN_NAME}'", '002.sql', {
+        ...env,
+        ADMIN_NAME: "O'Brien",
+      });
+      expect(out).toBe("'O''Brien'");
     });
   });
 });

@@ -60,6 +60,51 @@ export function getMigrationFiles() {
 }
 
 /**
+ * Placeholders allowed inside migration files, resolved from the environment.
+ * Keeping them out of the SQL avoids committing personal data to the repo.
+ * @type {Record<string, string>}
+ */
+const MIGRATION_PLACEHOLDERS = {
+  ADMIN_EMAIL: 'ADMIN_EMAIL',
+  ADMIN_NAME: 'ADMIN_NAME',
+};
+
+/**
+ * Escape a value for use inside a single-quoted SQL literal.
+ * @param {string} value
+ * @returns {string}
+ */
+function escapeSqlLiteral(value) {
+  return value.replace(/'/g, "''");
+}
+
+/**
+ * Replace ${VAR} placeholders in a migration with values from the environment.
+ * Throws when a placeholder is used but the variable is missing, so a missing
+ * config fails loudly instead of seeding the database with an empty admin.
+ * @param {string} sql
+ * @param {string} filename
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string}
+ */
+export function resolvePlaceholders(sql, filename, env = process.env) {
+  return sql.replace(/\$\{(\w+)\}/g, (_match, name) => {
+    if (!(name in MIGRATION_PLACEHOLDERS)) {
+      throw new Error(
+        `[migrate] ${filename}: unknown placeholder \${${name}}`
+      );
+    }
+    const value = env[name];
+    if (!value) {
+      throw new Error(
+        `[migrate] ${filename}: \${${name}} is required but not set. Add ${name} to your .env`
+      );
+    }
+    return escapeSqlLiteral(value);
+  });
+}
+
+/**
  * @param {pg.Pool} pool
  * @returns {Promise<{applied: string[], skipped: string[]}>}
  */
@@ -83,7 +128,7 @@ export async function runMigrations(pool) {
   for (const file of pending) {
     console.log(`[migrate] Applying ${file}...`);
     const filePath = path.join(__dirname, 'migrations', file);
-    const sql = fs.readFileSync(filePath, 'utf-8');
+    const sql = resolvePlaceholders(fs.readFileSync(filePath, 'utf-8'), file);
 
     const client = await pool.connect();
     try {
